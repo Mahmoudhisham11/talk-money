@@ -1,6 +1,6 @@
 "use client";
 
-import useSpeechRecognition from "@/hooks/voiseRecording";
+import useSpeechRecognition from "@/hooks/voiseRecording"
 
 export default function Main() {
   const {
