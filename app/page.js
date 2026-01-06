@@ -10,7 +10,7 @@ export default function Home() {
   const recognitionRef = useRef(null);
   const permissionAskedRef = useRef(false);
 
-  useEffect(() => {
+  const startListening = () => {
     if (typeof window === "undefined") return;
 
     const SpeechRecognition =
@@ -21,6 +21,7 @@ export default function Home() {
       return;
     }
 
+    // أنشئ كائن جديد في كل مرة لضمان عمل التسجيل في كل محاولة
     const recognition = new SpeechRecognition();
     recognition.lang = "ar-EG";
     recognition.continuous = false;
@@ -28,9 +29,10 @@ export default function Home() {
 
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
+      // نحفظ دائمًا آخر جملة تم التقاطها
       setText(transcript);
       setListening(false);
-      setStatus("تم الالتقاط");
+      setStatus("تم التقاط آخر جملة");
     };
 
     recognition.onerror = (event) => {
@@ -46,13 +48,6 @@ export default function Home() {
 
     recognitionRef.current = recognition;
 
-    return () => {
-      recognition.stop?.();
-    };
-  }, []);
-
-  const startListening = () => {
-    if (!recognitionRef.current) return;
     setError("");
     setStatus("طلب الإذن...");
     setListening(true);
