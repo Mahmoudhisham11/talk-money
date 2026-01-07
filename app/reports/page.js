@@ -5,18 +5,16 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { useTheme } from "../context/ThemeContext";
 import { FaBars } from "react-icons/fa";
 import SideBar from "../components/Sidebar";
-import styles from "./settings.module.css";
+import styles from "./reports.module.css";
 
-export default function SettingsPage() {
+export default function ReportsPage() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
-  const { theme, toggleTheme } = useTheme();
 
   // Auto-open sidebar on desktop
   useEffect(() => {
@@ -75,44 +73,18 @@ export default function SettingsPage() {
         >
           <FaBars />
         </button>
-        <h1 className={styles.title}>الإعدادات</h1>
+        <h1 className={styles.title}>التقارير</h1>
         <div style={{ width: 40 }}></div>
       </header>
 
       <div className={styles.contentContainer}>
         <main className={styles.main}>
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>المظهر</h2>
-          <div className={styles.settingItem}>
-            <div className={styles.settingInfo}>
-              <span className={styles.settingLabel}>الوضع</span>
-              <span className={styles.settingValue}>
-                {theme === "light" ? "فاتح" : "داكن"}
-              </span>
-            </div>
-            <button onClick={toggleTheme} className={styles.toggleButton}>
-              {theme === "light" ? "🌙" : "☀️"}
-            </button>
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>التقارير المالية</h2>
+            <p className={styles.description}>
+              صفحة التقارير قيد التطوير. سيتم إضافة التقارير المالية قريباً.
+            </p>
           </div>
-        </div>
-
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>الحساب</h2>
-          <div className={styles.settingItem}>
-            <div className={styles.settingInfo}>
-              <span className={styles.settingLabel}>البريد الإلكتروني</span>
-              <span className={styles.settingValue}>{user?.email}</span>
-            </div>
-          </div>
-          <div className={styles.settingItem}>
-            <div className={styles.settingInfo}>
-              <span className={styles.settingLabel}>الاسم</span>
-              <span className={styles.settingValue}>
-                {user?.displayName || "غير محدد"}
-              </span>
-            </div>
-          </div>
-        </div>
         </main>
         <SideBar
           isOpen={isSidebarOpen}

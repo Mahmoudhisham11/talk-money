@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -17,7 +16,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
-import { FaCreditCard, FaChartLine, FaClipboardList, FaCog, FaUsers } from "react-icons/fa";
+import { FaCog, FaUsers, FaBars } from "react-icons/fa";
 import BudgetSlider from "../components/BudgetSlider";
 import ExpenseList from "../components/ExpenseList";
 import AddBudgetModal from "../components/AddBudgetModal";
@@ -26,12 +25,28 @@ import EditExpenseModal from "../components/EditExpenseModal";
 import ConfirmModal from "../components/ConfirmModal";
 import ProfileDropdown from "../components/ProfileDropdown";
 import styles from "./home.module.css";
-
+import SideBar from "../components/Sidebar";
 export default function HomePage() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Auto-open sidebar on desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 769) {
+        setIsSidebarOpen(true);
+      } else {
+        setIsSidebarOpen(false);
+      }
+    };
+
+    handleResize(); // Set initial state
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [actionLoading, setActionLoading] = useState({
     add: false,
     addExpense: false,
@@ -205,14 +220,13 @@ export default function HomePage() {
     setActionLoading((prev) => ({ ...prev, add: true }));
 
     try {
-      const personalAmount = amount * 0.5;
-      const investmentAmount = amount * 0.2;
-      const commitmentsAmount = amount * 0.3;
+      // تقسيم المبلغ بالتساوي على 3
+      const dividedAmount = amount / 3;
 
       const newBudget = {
-        personal: budget.personal + personalAmount,
-        investment: budget.investment + investmentAmount,
-        commitments: budget.commitments + commitmentsAmount,
+        personal: budget.personal + dividedAmount,
+        investment: budget.investment + dividedAmount,
+        commitments: budget.commitments + dividedAmount,
       };
 
       await setDoc(
@@ -265,14 +279,12 @@ export default function HomePage() {
       let newBudget = { ...budget };
 
       if (expenseToDelete.type === "income") {
-        // إذا كان دخل، نطرح من الرصيد
-        const personalAmount = amount * 0.5;
-        const investmentAmount = amount * 0.2;
-        const commitmentsAmount = amount * 0.3;
+        // إذا كان دخل، نطرح من الرصيد (مقسوم على 3)
+        const dividedAmount = amount / 3;
         newBudget = {
-          personal: Math.max(0, budget.personal - personalAmount),
-          investment: Math.max(0, budget.investment - investmentAmount),
-          commitments: Math.max(0, budget.commitments - commitmentsAmount),
+          personal: Math.max(0, budget.personal - dividedAmount),
+          investment: Math.max(0, budget.investment - dividedAmount),
+          commitments: Math.max(0, budget.commitments - dividedAmount),
         };
       } else {
         // إذا كان مصروف، نضيف للرصيد
@@ -330,13 +342,12 @@ export default function HomePage() {
       // إعادة المبلغ القديم
       const oldAmount = oldExpense.amount || 0;
       if (oldExpense.type === "income") {
-        const personalAmount = oldAmount * 0.5;
-        const investmentAmount = oldAmount * 0.2;
-        const commitmentsAmount = oldAmount * 0.3;
+        // إعادة المبلغ القديم (مقسوم على 3)
+        const dividedOldAmount = oldAmount / 3;
         newBudget = {
-          personal: Math.max(0, budget.personal - personalAmount),
-          investment: Math.max(0, budget.investment - investmentAmount),
-          commitments: Math.max(0, budget.commitments - commitmentsAmount),
+          personal: Math.max(0, budget.personal - dividedOldAmount),
+          investment: Math.max(0, budget.investment - dividedOldAmount),
+          commitments: Math.max(0, budget.commitments - dividedOldAmount),
         };
       } else {
         const oldBudgetType = oldExpense.budgetType || "personal";
@@ -349,13 +360,12 @@ export default function HomePage() {
       // إضافة المبلغ الجديد
       const newAmount = updatedExpense.amount || 0;
       if (updatedExpense.type === "income") {
-        const personalAmount = newAmount * 0.5;
-        const investmentAmount = newAmount * 0.2;
-        const commitmentsAmount = newAmount * 0.3;
+        // إضافة المبلغ الجديد (مقسوم على 3)
+        const dividedNewAmount = newAmount / 3;
         newBudget = {
-          personal: newBudget.personal + personalAmount,
-          investment: newBudget.investment + investmentAmount,
-          commitments: newBudget.commitments + commitmentsAmount,
+          personal: newBudget.personal + dividedNewAmount,
+          investment: newBudget.investment + dividedNewAmount,
+          commitments: newBudget.commitments + dividedNewAmount,
         };
       } else {
         const newBudgetType = updatedExpense.budgetType || "personal";
@@ -437,19 +447,21 @@ export default function HomePage() {
     <div className={styles.container}>
       <header className={styles.header}>
         <div className={styles.headerContent}>
-          <div className={styles.userSection}>
-            <ProfileDropdown userName={userName} onLogout={handleLogout} />
-            <div className={styles.userInfo}>
-              <h1 className={styles.userName}>{userName}</h1>
-              {userRole && (
-                <span
-                  className={`${styles.roleBadge} ${
-                    userRole === "admin" ? styles.admin : styles.user
-                  }`}
-                >
-                  {userRole === "admin" ? "مدير" : "مستخدم"}
-                </span>
-              )}
+          <div className={styles.headerLeft}>
+            <div className={styles.userSection}>
+              <ProfileDropdown userName={userName} onLogout={handleLogout} />
+              <div className={styles.userInfo}>
+                <h1 className={styles.userName}>{userName}</h1>
+                {userRole && (
+                  <span
+                    className={`${styles.roleBadge} ${
+                      userRole === "admin" ? styles.admin : styles.user
+                    }`}
+                  >
+                    {userRole === "admin" ? "مدير" : "مستخدم"}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className={styles.links}>
@@ -461,104 +473,96 @@ export default function HomePage() {
             >
               <FaCog />
             </button>
-            {userRole === "admin" && (
-              <button
-                onClick={() => router.push("/admin")}
-                className={styles.iconButton}
-                title="إدارة المستخدمين"
-                aria-label="إدارة المستخدمين"
-              >
-                <FaUsers />
-              </button>
-            )}
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className={styles.burgerButton}
+              aria-label="قائمة التنقل"
+            >
+              <FaBars />
+            </button>
           </div>
         </div>
       </header>
+      <div className={styles.contentContainer}>
+        <main className={styles.mainContent}>
+          <div className={styles.content}>
+            <section className={styles.budgetSection}>
+              <BudgetSlider
+                budgets={budgets}
+                onCardClick={handleCardClick}
+                selectedCardIndex={selectedCardIndex}
+              />
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className={styles.addButton}
+              >
+                <span className={styles.addIcon}>+</span>
+                إضافة مبلغ جديد
+              </button>
+            </section>
 
-      <main className={styles.main}>
-        <div className={styles.content}>
-          <section className={styles.budgetSection}>
-            <BudgetSlider
-              budgets={budgets}
-              onCardClick={handleCardClick}
-              selectedCardIndex={selectedCardIndex}
+            <ExpenseList
+              expenses={expenses}
+              allExpensesCount={allExpenses.length}
+              displayLimit={displayLimit}
+              onEdit={handleEditExpense}
+              onDelete={handleDeleteClick}
+              onLoadMore={handleLoadMore}
             />
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className={styles.addButton}
-            >
-              <span className={styles.addIcon}>+</span>
-              إضافة مبلغ جديد
-            </button>
-          </section>
+          </div>
+        </main>
+        <SideBar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          userRole={userRole}
+        />
+        <AddBudgetModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onAdd={handleAddBudget}
+          loading={actionLoading.add}
+        />
 
-          <ExpenseList
-            expenses={expenses}
-            allExpensesCount={allExpenses.length}
-            displayLimit={displayLimit}
-            onEdit={handleEditExpense}
-            onDelete={handleDeleteClick}
-            onLoadMore={handleLoadMore}
-          />
-        </div>
-      </main>
+        <AddExpenseModal
+          isOpen={isExpenseModalOpen}
+          onClose={() => {
+            setIsExpenseModalOpen(false);
+            setSelectedCardIndex(null);
+          }}
+          onAdd={handleAddExpense}
+          selectedBudgetType={
+            selectedCardIndex !== null
+              ? ["personal", "investment", "commitments"][selectedCardIndex]
+              : null
+          }
+          loading={actionLoading.addExpense}
+        />
 
-      <AddBudgetModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onAdd={handleAddBudget}
-        loading={actionLoading.add}
-      />
+        <EditExpenseModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setSelectedExpense(null);
+          }}
+          expense={selectedExpense}
+          onSave={handleSaveExpense}
+          loading={actionLoading.edit}
+        />
 
-      <AddExpenseModal
-        isOpen={isExpenseModalOpen}
-        onClose={() => {
-          setIsExpenseModalOpen(false);
-          setSelectedCardIndex(null);
-        }}
-        onAdd={handleAddExpense}
-        selectedBudgetType={
-          selectedCardIndex !== null
-            ? ["personal", "investment", "commitments"][selectedCardIndex]
-            : null
-        }
-        loading={actionLoading.addExpense}
-      />
-
-      <EditExpenseModal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setSelectedExpense(null);
-        }}
-        expense={selectedExpense}
-        onSave={handleSaveExpense}
-        loading={actionLoading.edit}
-      />
-
-      <ConfirmModal
-        isOpen={isConfirmModalOpen}
-        onClose={() => {
-          setIsConfirmModalOpen(false);
-          setExpenseToDelete(null);
-        }}
-        onConfirm={handleConfirmDelete}
-        title="تأكيد الحذف"
-        message="هل أنت متأكد من حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء."
-        confirmText={actionLoading.delete ? "جاري الحذف..." : "حذف"}
-        cancelText="إلغاء"
-        type="danger"
-      />
-
-      {selectedCardIndex !== null && (
-        <button
-          onClick={() => setIsExpenseModalOpen(true)}
-          className={styles.fabButton}
-          title="إضافة مصروف"
-        >
-          <span className={styles.fabIcon}>+</span>
-        </button>
-      )}
+        <ConfirmModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => {
+            setIsConfirmModalOpen(false);
+            setExpenseToDelete(null);
+          }}
+          onConfirm={handleConfirmDelete}
+          title="تأكيد الحذف"
+          message="هل أنت متأكد من حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء."
+          confirmText={actionLoading.delete ? "جاري الحذف..." : "حذف"}
+          cancelText="إلغاء"
+          type="danger"
+        />
+      </div>
     </div>
   );
 }

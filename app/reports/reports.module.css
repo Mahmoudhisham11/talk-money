@@ -29,13 +29,13 @@
 .header {
   background: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  padding: 20px 24px;
   position: sticky;
   top: 0;
   z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .burgerButton {
@@ -65,10 +65,10 @@
 }
 
 .title {
-  margin: 0;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
+  margin: 0;
 }
 
 .main {
@@ -80,73 +80,29 @@
 }
 
 .mainContent {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
 .section {
   background: var(--card-bg);
   border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 24px;
-  border: 1px solid var(--border-color);
+  padding: 32px;
   box-shadow: 0 2px 8px var(--shadow);
 }
 
 .sectionTitle {
-  margin: 0 0 20px 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.settingItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.settingItem:last-child {
-  border-bottom: none;
-}
-
-.settingInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.settingLabel {
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--text-primary);
+  margin: 0 0 16px 0;
 }
 
-.settingValue {
-  font-size: 14px;
+.description {
+  font-size: 16px;
   color: var(--text-secondary);
-}
-
-.toggleButton {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 2px solid var(--border-color);
-  background: var(--card-bg);
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-}
-
-.toggleButton:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px var(--shadow);
+  line-height: 1.6;
+  margin: 0;
 }
 
 @media (min-width: 769px) {
@@ -168,6 +124,14 @@
     flex-direction: column;
   }
 
+  .header {
+    padding: 16px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
   .main {
     padding: 24px 16px;
     width: 100%;
@@ -175,7 +139,7 @@
   }
 
   .section {
-    padding: 20px;
+    padding: 24px;
   }
 
   .burgerButton {

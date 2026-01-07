@@ -6,20 +6,38 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
-import { FaTrashAlt, FaArrowRight } from "react-icons/fa";
+import { FaTrashAlt, FaArrowRight, FaBars } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
+import SideBar from "../components/Sidebar";
 import styles from "./admin.module.css";
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
   const { showSuccess, showError } = useNotifications();
+
+  // Auto-open sidebar on desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 769) {
+        setIsSidebarOpen(true);
+      } else {
+        setIsSidebarOpen(false);
+      }
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -33,6 +51,8 @@ export default function AdminPage() {
           router.push("/home");
           return;
         }
+
+        setUserRole(userData?.role || "admin");
 
         // جلب جميع المستخدمين
         await fetchUsers();
@@ -124,17 +144,23 @@ export default function AdminPage() {
 
   return (
     <div className={styles.container}>
-      <div className={styles.header}>
+      <header className={styles.header}>
         <div className={styles.headerContent}>
-          <h1 className={styles.title}>إدارة المستخدمين</h1>
-          <button onClick={() => router.push("/home")} className={styles.backButton}>
-            <FaArrowRight />
-            <span>العودة</span>
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className={styles.burgerButton}
+            aria-label="قائمة التنقل"
+          >
+            <FaBars />
           </button>
+          <h1 className={styles.title}>إدارة المستخدمين</h1>
+          <div style={{ width: 40 }}></div>
         </div>
-      </div>
+      </header>
 
-      <div className={styles.tableContainer}>
+      <div className={styles.contentContainer}>
+        <main className={styles.main}>
+          <div className={styles.tableContainer}>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -200,6 +226,13 @@ export default function AdminPage() {
             )}
           </tbody>
         </table>
+        </div>
+      </main>
+      <SideBar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        userRole={userRole}
+      />
       </div>
 
       <ConfirmModal

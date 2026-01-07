@@ -43,6 +43,12 @@ const categoryNames = {
   income: "دخل",
 };
 
+const budgetTypeNames = {
+  personal: "مصاريف شخصية",
+  investment: "استثمار",
+  commitments: "التزامات",
+};
+
 export default function ExpenseList({ expenses, allExpensesCount, displayLimit, onEdit, onDelete, onLoadMore }) {
   const formatDate = (date) => {
     const d = new Date(date);
@@ -117,6 +123,9 @@ export default function ExpenseList({ expenses, allExpensesCount, displayLimit, 
             <h3 className={styles.dateLabel}>{dateKey}</h3>
             {dateExpenses.map((expense) => {
               const IconComponent = categoryIcons[expense.category] || categoryIcons.other;
+              const budgetTypeClass = expense.budgetType 
+                ? `${styles.budgetType} ${styles[expense.budgetType]}`
+                : '';
               return (
                 <div key={expense.id} className={styles.expenseItem}>
                   <div className={styles.iconWrapper}>
@@ -130,6 +139,11 @@ export default function ExpenseList({ expenses, allExpensesCount, displayLimit, 
                       <span className={styles.time}>
                         {formatTime(expense.date || expense.createdAt)}
                       </span>
+                      {expense.type !== "income" && expense.budgetType && (
+                        <span className={budgetTypeClass}>
+                          {budgetTypeNames[expense.budgetType] || expense.budgetType}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className={styles.expenseActions}>

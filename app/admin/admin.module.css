@@ -1,9 +1,17 @@
 .container {
   min-height: 100vh;
   background: var(--bg-primary);
-  padding: 24px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   transition: background-color 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.contentContainer {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  overflow: hidden;
 }
 
 .loading {
@@ -21,11 +29,11 @@
 
 .header {
   background: var(--card-bg);
-  border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 32px;
-  box-shadow: 0 2px 8px var(--shadow);
-  border: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 20px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   transition: all 0.3s ease;
 }
 
@@ -36,12 +44,40 @@
   gap: 16px;
 }
 
+.burgerButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.burgerButton:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow-lg);
+}
+
+.burgerButton:active {
+  transform: translateY(0);
+}
+
 .title {
   margin: 0;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
   transition: color 0.3s ease;
+  flex: 1;
+  text-align: center;
 }
 
 .backButton {
@@ -68,6 +104,14 @@
 
 .backButton svg {
   font-size: 16px;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 100%;
+  padding: 32px 24px;
 }
 
 .tableContainer {
@@ -210,28 +254,52 @@
   font-size: 16px;
 }
 
+@media (min-width: 769px) {
+  .burgerButton {
+    display: none;
+  }
+
+  .contentContainer {
+    flex-direction: row-reverse; /* Sidebar on right */
+  }
+
+  .main {
+    max-width: calc(100% - 280px);
+  }
+}
+
 @media (max-width: 768px) {
   .container {
-    padding: 16px;
+    padding: 0;
   }
 
   .header {
-    padding: 20px;
+    padding: 16px;
   }
 
   .headerContent {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
+    justify-content: space-between;
   }
 
   .title {
-    font-size: 24px;
+    font-size: 20px;
   }
 
-  .backButton {
+  .main {
+    padding: 24px 16px;
     width: 100%;
-    justify-content: center;
+    max-width: 100%;
+  }
+
+  .contentContainer {
+    flex-direction: column;
+  }
+
+  .burgerButton {
+    display: flex;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
 
   .tableContainer {
