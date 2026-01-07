@@ -3,14 +3,20 @@ const nextConfig = {
   /* config options here */
 };
 
-// Only apply PWA in production build
-if (process.env.NODE_ENV === "production") {
-  const withPWA = require("next-pwa")({
-    dest: "public",
-    register: true,
-    skipWaiting: true,
-  });
-  module.exports = withPWA(nextConfig);
+// Disable PWA on Netlify to avoid build issues
+// PWA will only work in local production builds
+if (process.env.NODE_ENV === "production" && !process.env.NETLIFY && !process.env.VERCEL) {
+  try {
+    const withPWA = require("next-pwa")({
+      dest: "public",
+      register: true,
+      skipWaiting: true,
+    });
+    module.exports = withPWA(nextConfig);
+  } catch (error) {
+    console.warn("PWA configuration skipped:", error.message);
+    module.exports = nextConfig;
+  }
 } else {
   module.exports = nextConfig;
 }
