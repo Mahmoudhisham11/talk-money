@@ -12,6 +12,7 @@
 .swiperSlide {
   height: auto;
   display: flex;
+  padding: 10px;
 }
 
 /* Custom Pagination */
