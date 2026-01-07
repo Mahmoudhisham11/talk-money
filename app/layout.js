@@ -16,7 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "Talk Money - تتبع المصاريف",
   description: "تطبيق لتتبع وإدارة المصاريف الشخصية",
-  manifest: "/manifest.json",
 };
 
 export default function RootLayout({ children }) {
