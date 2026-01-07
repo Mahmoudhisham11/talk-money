@@ -1,0 +1,499 @@
+.container {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: background-color 0.3s ease;
+}
+
+.loginCard {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 40px 32px;
+  box-shadow: 0 4px 20px var(--shadow);
+  transition: all 0.3s ease;
+  border: 1px solid var(--border-color);
+}
+
+.title {
+  margin: 0 0 32px 0;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: color 0.3s ease;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.3s ease;
+}
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 2px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 16px;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.passwordContainer {
+  position: relative;
+}
+
+.passwordInput {
+  padding-right: 45px;
+}
+
+.eyeIcon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--text-secondary);
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.eyeIcon:hover {
+  color: var(--text-primary);
+}
+
+.rememberForgot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: -8px;
+}
+
+.checkboxGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.checkboxLabel {
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.3s ease;
+  user-select: none;
+}
+
+.forgotPassword {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.forgotPassword:hover {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.submitButton {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--button-primary);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.submitButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+  background: var(--button-hover);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.errorMessage {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 14px;
+  text-align: center;
+  margin-top: -8px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+  transition: background-color 0.3s ease;
+}
+
+.dividerText {
+  padding: 0 16px;
+  background: var(--card-bg);
+  font-weight: 600;
+  transition: background-color 0.3s ease;
+}
+
+.socialButtons {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.socialButton {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 24px;
+  transition: all 0.2s ease;
+  font-weight: 700;
+}
+
+.socialButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow);
+  border-color: #3b82f6;
+}
+
+.socialButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.socialButton.google {
+  background: linear-gradient(135deg, #ea4335 0%, #fbbc04 50%, #34a853 100%);
+  color: white;
+  border: none;
+}
+
+.socialButton.facebook {
+  background: #1877f2;
+  color: white;
+  border: none;
+}
+
+.socialButton.twitter {
+  background: #1da1f2;
+  color: white;
+  border: none;
+}
+
+.switchLink {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  transition: color 0.3s ease;
+}
+
+.switchButton {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  padding: 0;
+  margin-left: 4px;
+  transition: all 0.2s ease;
+}
+
+.switchButton:hover {
+  text-decoration: underline;
+  color: #2563eb;
+}
+
+.themeToggle {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 24px;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.themeToggle:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px var(--shadow-lg);
+}
+
+/* From Uiverse.io by Shoh2008 */
+.checkboxWrapper12 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkboxWrapper12 > svg {
+  position: absolute;
+  top: -130%;
+  left: -170%;
+  width: 110px;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.checkboxWrapper12 * {
+  box-sizing: border-box;
+}
+
+.checkboxWrapper12 input[type="checkbox"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+.checkboxWrapper12 input[type="checkbox"]:focus {
+  outline: 0;
+}
+
+.checkboxWrapper12 .cbx {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  top: 0;
+  left: 0;
+}
+
+.checkboxWrapper12 .cbx input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  background: transparent;
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+.checkboxWrapper12 .cbx input:checked {
+  border-color: #866efb;
+  background: #866efb;
+}
+
+[data-theme="dark"] .checkboxWrapper12 .cbx input {
+  border-color: #6b7280;
+}
+
+[data-theme="dark"] .checkboxWrapper12 .cbx input:checked {
+  border-color: #866efb;
+  background: #866efb;
+}
+
+.checkboxWrapper12 .cbx label {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border-radius: 50%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate3d(0, 0, 0);
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.checkboxWrapper12 .cbx svg {
+  position: absolute;
+  top: 5px;
+  left: 4px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.checkboxWrapper12 .cbx svg path {
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 19;
+  stroke-dashoffset: 19;
+  transition: stroke-dashoffset 0.3s ease;
+  transition-delay: 0.2s;
+}
+
+.checkboxWrapper12 .cbx input:checked + label {
+  animation: splash-12 0.6s ease forwards;
+}
+
+.checkboxWrapper12 .cbx input:checked + label + svg path {
+  stroke-dashoffset: 0;
+}
+
+@-moz-keyframes splash-12 {
+  40% {
+    background: #866efb;
+    box-shadow: 0 -18px 0 -8px #866efb, 16px -8px 0 -8px #866efb,
+      16px 8px 0 -8px #866efb, 0 18px 0 -8px #866efb, -16px 8px 0 -8px #866efb,
+      -16px -8px 0 -8px #866efb;
+  }
+
+  100% {
+    background: #866efb;
+    box-shadow: 0 -36px 0 -10px transparent, 32px -16px 0 -10px transparent,
+      32px 16px 0 -10px transparent, 0 36px 0 -10px transparent,
+      -32px 16px 0 -10px transparent, -32px -16px 0 -10px transparent;
+  }
+}
+
+@-webkit-keyframes splash-12 {
+  40% {
+    background: #866efb;
+    box-shadow: 0 -18px 0 -8px #866efb, 16px -8px 0 -8px #866efb,
+      16px 8px 0 -8px #866efb, 0 18px 0 -8px #866efb, -16px 8px 0 -8px #866efb,
+      -16px -8px 0 -8px #866efb;
+  }
+
+  100% {
+    background: #866efb;
+    box-shadow: 0 -36px 0 -10px transparent, 32px -16px 0 -10px transparent,
+      32px 16px 0 -10px transparent, 0 36px 0 -10px transparent,
+      -32px 16px 0 -10px transparent, -32px -16px 0 -10px transparent;
+  }
+}
+
+@-o-keyframes splash-12 {
+  40% {
+    background: #866efb;
+    box-shadow: 0 -18px 0 -8px #866efb, 16px -8px 0 -8px #866efb,
+      16px 8px 0 -8px #866efb, 0 18px 0 -8px #866efb, -16px 8px 0 -8px #866efb,
+      -16px -8px 0 -8px #866efb;
+  }
+
+  100% {
+    background: #866efb;
+    box-shadow: 0 -36px 0 -10px transparent, 32px -16px 0 -10px transparent,
+      32px 16px 0 -10px transparent, 0 36px 0 -10px transparent,
+      -32px 16px 0 -10px transparent, -32px -16px 0 -10px transparent;
+  }
+}
+
+@keyframes splash-12 {
+  40% {
+    background: #866efb;
+    box-shadow: 0 -18px 0 -8px #866efb, 16px -8px 0 -8px #866efb,
+      16px 8px 0 -8px #866efb, 0 18px 0 -8px #866efb, -16px 8px 0 -8px #866efb,
+      -16px -8px 0 -8px #866efb;
+  }
+
+  100% {
+    background: #866efb;
+    box-shadow: 0 -36px 0 -10px transparent, 32px -16px 0 -10px transparent,
+      32px 16px 0 -10px transparent, 0 36px 0 -10px transparent,
+      -32px 16px 0 -10px transparent, -32px -16px 0 -10px transparent;
+  }
+}
+
+@media (max-width: 480px) {
+  .loginCard {
+    padding: 32px 24px;
+    border-radius: 12px;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .themeToggle {
+    top: 16px;
+    left: 16px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+}

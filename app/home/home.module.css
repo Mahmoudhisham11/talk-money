@@ -1,0 +1,204 @@
+.container {
+  min-height: 100vh;
+  background: var(--bg-primary);
+  transition: background-color 0.3s ease;
+}
+
+.loadingContainer {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.loadingText {
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+/* Header */
+.header {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  padding: 20px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.headerContent {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 16px;
+}
+
+.userSection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.userName {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.roleBadge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: fit-content;
+}
+
+.roleBadge.admin {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.roleBadge.user {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+
+/* Main Content */
+.main {
+  padding: 32px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.budgetSection {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.addButton {
+  width: 100%;
+  padding: 20px;
+  border-radius: 16px;
+  border: 2px dashed var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.addButton:hover {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px var(--shadow-lg);
+}
+
+.addIcon {
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+  color: #3b82f6;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 16px;
+  }
+
+  .headerContent {
+    justify-content: flex-start;
+  }
+
+  .userSection {
+    gap: 12px;
+  }
+
+  .userName {
+    font-size: 20px;
+  }
+
+  .main {
+    padding: 24px 16px;
+  }
+
+  .content {
+    gap: 24px;
+  }
+
+  .addButton {
+    padding: 16px;
+  }
+}
+
+/* Floating Action Button */
+.fabButton {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  font-size: 32px;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+
+.fabButton:hover {
+  transform: scale(1.1) rotate(90deg);
+  box-shadow: 0 6px 30px rgba(59, 130, 246, 0.6);
+}
+
+.fabIcon {
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .fabButton {
+    width: 56px;
+    height: 56px;
+    font-size: 28px;
+    bottom: 20px;
+    left: 20px;
+  }
+}

@@ -1,0 +1,64 @@
+.sliderContainer {
+  position: relative;
+  width: 100%;
+  overflow: visible;
+}
+
+.swiper {
+  width: 100%;
+  padding-bottom: 40px !important;
+}
+
+.swiperSlide {
+  height: auto;
+  display: flex;
+}
+
+/* Custom Pagination */
+:global(.swiper-pagination) {
+  position: relative !important;
+  margin-top: 16px;
+  bottom: 0 !important;
+}
+
+:global(.swiper-pagination-bullet) {
+  width: 8px;
+  height: 8px;
+  background: var(--border-color);
+  opacity: 1;
+  transition: all 0.3s ease;
+}
+
+:global(.swiper-pagination-bullet-active) {
+  background: #3b82f6;
+  width: 24px;
+  border-radius: 4px;
+}
+
+/* Desktop: Show all cards */
+@media (min-width: 769px) {
+  .swiper {
+    padding-bottom: 0 !important;
+  }
+
+  :global(.swiper-pagination) {
+    display: none;
+  }
+}
+
+/* Mobile: Show slider */
+@media (max-width: 768px) {
+  .sliderContainer {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .swiper {
+    overflow: visible;
+  }
+
+  .swiperSlide {
+    width: 100%;
+  }
+}
