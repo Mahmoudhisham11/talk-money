@@ -30,10 +30,11 @@
 }
 
 .headerContent {
+  direction: ltr;
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
 }
@@ -80,6 +81,37 @@
   color: var(--text-secondary);
 }
 
+.links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.iconButton {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.iconButton:hover {
+  background: var(--bg-tertiary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--shadow-lg);
+}
+
+.iconButton:active {
+  transform: translateY(0);
+}
 
 /* Main Content */
 .main {
@@ -138,7 +170,7 @@
   }
 
   .headerContent {
-    justify-content: flex-start;
+    justify-content: space-between;
   }
 
   .userSection {
@@ -147,6 +179,16 @@
 
   .userName {
     font-size: 20px;
+  }
+
+  .links {
+    gap: 8px;
+  }
+
+  .iconButton {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
 
   .main {

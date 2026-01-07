@@ -52,6 +52,27 @@
   overflow: hidden;
 }
 
+/* التأكد من أن الـ dropdown لا يخرج من الشاشة */
+@media (min-width: 769px) {
+  .dropdown {
+    right: -190px;
+    left: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .dropdown {
+    right: -190px;
+    left: auto;
+    max-width: calc(100vw - 16px);
+    min-width: 200px;
+  }
+  
+  .container {
+    position: relative;
+  }
+}
+
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -160,9 +181,4 @@
   color: #ef4444;
 }
 
-@media (max-width: 768px) {
-  .dropdown {
-    max-width: calc(100vw - 16px);
-  }
-}
 

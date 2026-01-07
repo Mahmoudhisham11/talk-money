@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { collection, getDocs, getDoc, doc, updateDoc, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { useNotifications } from "../context/NotificationContext";
+import { FaTrashAlt, FaArrowRight } from "react-icons/fa";
+import ConfirmModal from "../components/ConfirmModal";
 import styles from "./admin.module.css";
 
 export default function AdminPage() {
@@ -12,7 +15,11 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const router = useRouter();
+  const { showSuccess, showError } = useNotifications();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -68,18 +75,49 @@ export default function AdminPage() {
       setUsers((prevUsers) =>
         prevUsers.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
       );
+      showSuccess("تم تحديث صلاحيات المستخدم بنجاح");
     } catch (error) {
       console.error("Error updating user role:", error);
-      alert("حدث خطأ أثناء تحديث صلاحيات المستخدم");
+      showError("حدث خطأ أثناء تحديث صلاحيات المستخدم");
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleDeleteClick = (userItem) => {
+    setUserToDelete(userItem);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete || deleting) return;
+
+    setDeleting(true);
+    setIsDeleteModalOpen(false);
+
+    try {
+      // حذف المستخدم من Firestore
+      await deleteDoc(doc(db, "users", userToDelete.id));
+
+      // تحديث القائمة المحلية
+      setUsers((prevUsers) =>
+        prevUsers.filter((u) => u.id !== userToDelete.id)
+      );
+
+      showSuccess("تم حذف المستخدم بنجاح");
+      setUserToDelete(null);
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      showError("حدث خطأ أثناء حذف المستخدم");
+    } finally {
+      setDeleting(false);
     }
   };
 
   if (loading) {
     return (
       <div className={styles.loading}>
-        <div>جاري التحميل...</div>
+        <div className={styles.loadingText}>جاري التحميل...</div>
       </div>
     );
   }
@@ -87,10 +125,13 @@ export default function AdminPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>إدارة المستخدمين</h1>
-        <button onClick={() => router.push("/home")} className={styles.backButton}>
-          العودة للصفحة الرئيسية
-        </button>
+        <div className={styles.headerContent}>
+          <h1 className={styles.title}>إدارة المستخدمين</h1>
+          <button onClick={() => router.push("/home")} className={styles.backButton}>
+            <FaArrowRight />
+            <span>العودة</span>
+          </button>
+        </div>
       </div>
 
       <div className={styles.tableContainer}>
@@ -131,17 +172,28 @@ export default function AdminPage() {
                       : "-"}
                   </td>
                   <td>
-                    <select
-                      value={userItem.role}
-                      onChange={(e) =>
-                        updateUserRole(userItem.id, e.target.value)
-                      }
-                      disabled={updating || userItem.id === user?.uid}
-                      className={styles.roleSelect}
-                    >
-                      <option value="user">مستخدم</option>
-                      <option value="admin">مدير</option>
-                    </select>
+                    <div className={styles.actions}>
+                      <select
+                        value={userItem.role}
+                        onChange={(e) =>
+                          updateUserRole(userItem.id, e.target.value)
+                        }
+                        disabled={updating || userItem.id === user?.uid}
+                        className={styles.roleSelect}
+                      >
+                        <option value="user">مستخدم</option>
+                        <option value="admin">مدير</option>
+                      </select>
+                      <button
+                        onClick={() => handleDeleteClick(userItem)}
+                        disabled={deleting || userItem.id === user?.uid}
+                        className={styles.deleteButton}
+                        title="حذف المستخدم"
+                        aria-label="حذف المستخدم"
+                      >
+                        <FaTrashAlt />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -149,6 +201,20 @@ export default function AdminPage() {
           </tbody>
         </table>
       </div>
+
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setUserToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="تأكيد الحذف"
+        message={`هل أنت متأكد من حذف المستخدم "${userToDelete?.displayName || userToDelete?.email}"؟ لا يمكن التراجع عن هذا الإجراء.`}
+        confirmText={deleting ? "جاري الحذف..." : "حذف"}
+        cancelText="إلغاء"
+        type="danger"
+      />
     </div>
   );
 }

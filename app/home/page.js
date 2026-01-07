@@ -4,9 +4,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  deleteDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
-import { FaCreditCard, FaChartLine, FaClipboardList } from "react-icons/fa";
+import { FaCreditCard, FaChartLine, FaClipboardList, FaCog, FaUsers } from "react-icons/fa";
 import BudgetSlider from "../components/BudgetSlider";
 import ExpenseList from "../components/ExpenseList";
 import AddBudgetModal from "../components/AddBudgetModal";
@@ -50,7 +61,7 @@ export default function HomePage() {
         setUser(currentUser);
         const name = currentUser.displayName || currentUser.email || "";
         setUserName(name);
-        
+
         if (typeof window !== "undefined") {
           localStorage.setItem("userName", name);
         }
@@ -136,12 +147,19 @@ export default function HomePage() {
         1: "investment",
         2: "commitments",
       };
-      
-      const selectedType = budgetTypeMap[selectedCardIndex] || expenseData.budgetType || "personal";
+
+      const selectedType =
+        budgetTypeMap[selectedCardIndex] ||
+        expenseData.budgetType ||
+        "personal";
       const currentBudget = budget[selectedType];
 
       if (expenseData.amount > currentBudget) {
-        showError(`المبلغ المتاح في هذا الكارت غير كافي. المتاح: ${currentBudget.toLocaleString("ar-EG")} ج.م`);
+        showError(
+          `المبلغ المتاح في هذا الكارت غير كافي. المتاح: ${currentBudget.toLocaleString(
+            "ar-EG"
+          )} ج.م`
+        );
         setActionLoading((prev) => ({ ...prev, addExpense: false }));
         return;
       }
@@ -394,21 +412,24 @@ export default function HomePage() {
       amount: budget.personal,
       icon: "💳",
       color: "rgba(59, 130, 246, 0.2)",
-      gradient: "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)",
+      gradient:
+        "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)",
     },
     {
       title: "استثمار",
       amount: budget.investment,
       icon: "📈",
       color: "rgba(16, 185, 129, 0.2)",
-      gradient: "linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%)",
+      gradient:
+        "linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%)",
     },
     {
       title: "التزامات",
       amount: budget.commitments,
       icon: "📋",
       color: "rgba(245, 158, 11, 0.2)",
-      gradient: "linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.15) 100%)",
+      gradient:
+        "linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.15) 100%)",
     },
   ];
 
@@ -421,11 +442,35 @@ export default function HomePage() {
             <div className={styles.userInfo}>
               <h1 className={styles.userName}>{userName}</h1>
               {userRole && (
-                <span className={`${styles.roleBadge} ${userRole === "admin" ? styles.admin : styles.user}`}>
+                <span
+                  className={`${styles.roleBadge} ${
+                    userRole === "admin" ? styles.admin : styles.user
+                  }`}
+                >
                   {userRole === "admin" ? "مدير" : "مستخدم"}
                 </span>
               )}
             </div>
+          </div>
+          <div className={styles.links}>
+            <button
+              onClick={() => router.push("/settings")}
+              className={styles.iconButton}
+              title="الإعدادات"
+              aria-label="الإعدادات"
+            >
+              <FaCog />
+            </button>
+            {userRole === "admin" && (
+              <button
+                onClick={() => router.push("/admin")}
+                className={styles.iconButton}
+                title="إدارة المستخدمين"
+                aria-label="إدارة المستخدمين"
+              >
+                <FaUsers />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -433,8 +478,8 @@ export default function HomePage() {
       <main className={styles.main}>
         <div className={styles.content}>
           <section className={styles.budgetSection}>
-            <BudgetSlider 
-              budgets={budgets} 
+            <BudgetSlider
+              budgets={budgets}
               onCardClick={handleCardClick}
               selectedCardIndex={selectedCardIndex}
             />
@@ -447,7 +492,7 @@ export default function HomePage() {
             </button>
           </section>
 
-          <ExpenseList 
+          <ExpenseList
             expenses={expenses}
             allExpensesCount={allExpenses.length}
             displayLimit={displayLimit}
@@ -472,7 +517,11 @@ export default function HomePage() {
           setSelectedCardIndex(null);
         }}
         onAdd={handleAddExpense}
-        selectedBudgetType={selectedCardIndex !== null ? ["personal", "investment", "commitments"][selectedCardIndex] : null}
+        selectedBudgetType={
+          selectedCardIndex !== null
+            ? ["personal", "investment", "commitments"][selectedCardIndex]
+            : null
+        }
         loading={actionLoading.addExpense}
       />
 

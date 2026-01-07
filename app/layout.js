@@ -16,6 +16,22 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "Talk Money - تتبع المصاريف",
   description: "تطبيق لتتبع وإدارة المصاريف الشخصية",
+  manifest: "/manifest.json",
+  themeColor: "#3b82f6",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Talk Money",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Talk Money",
+    title: "Talk Money - تتبع المصاريف",
+    description: "تطبيق لتتبع وإدارة المصاريف الشخصية",
+  },
 };
 
 export default function RootLayout({ children }) {
