@@ -206,8 +206,14 @@ export default function LoginPage() {
         showError("تم إغلاق نافذة تسجيل الدخول");
       } else if (err.code === "auth/operation-not-allowed") {
         showError("تسجيل الدخول بـ Google غير مفعّل في Firebase Console");
+      } else if (err.code === "auth/unauthorized-domain") {
+        showError(
+          "النطاق الحالي غير مصرح به. يرجى إضافة النطاق في Firebase Console:\n" +
+          "Authentication > Settings > Authorized domains > Add domain\n" +
+          "أضف: localhost"
+        );
       } else {
-        showError("حدث خطأ أثناء تسجيل الدخول بـ Google");
+        showError(`حدث خطأ أثناء تسجيل الدخول بـ Google: ${err.message || err.code}`);
       }
     } finally {
       setLoading(false);
