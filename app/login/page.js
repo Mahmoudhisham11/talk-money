@@ -7,8 +7,6 @@ import { auth, db } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
   updateProfile,
 } from "firebase/auth";
 import { FaRegEyeSlash } from "react-icons/fa";
@@ -17,6 +15,7 @@ import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { useTheme } from "../context/ThemeContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 import styles from "../login.module.css";
 
 export default function LoginPage() {
@@ -32,6 +31,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { showSuccess, showError } = useNotifications();
+  const { signInWithGoogle } = useAuth();
 
   // دالة مشتركة للتحقق من وجود المستخدم في Firestore
   const checkUserExists = async (uid) => {
@@ -270,83 +270,19 @@ export default function LoginPage() {
     setIsProcessing(true);
 
     try {
-      // تسجيل الخروج أولاً لإجبار اختيار الحساب
-      try {
-        await signOut(auth);
-      } catch (signOutError) {
-        // تجاهل خطأ تسجيل الخروج إذا لم يكن هناك مستخدم مسجل دخول
-      }
-
-      // إعداد Google Auth Provider مع إجبار اختيار الحساب
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({
-        prompt: "select_account"
-      });
-
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      // التحقق من وجود المستخدم في Firestore أولاً
-      const userExists = await checkUserExists(user.uid);
+      await signInWithGoogle();
       
-      if (!userExists) {
-        // المستخدم غير موجود - إنشاء مستند جديد
-        await createUserDocument(user, "user");
-        
-        // التحقق مرة أخرى من إنشاء المستند
-        const verified = await checkUserExists(user.uid);
-        if (!verified) {
-          await signOut(auth);
-          showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
-          setIsProcessing(false);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // التحقق النهائي قبل السماح بالدخول
-      const finalCheck = await checkUserExists(user.uid);
-      if (!finalCheck) {
-        await signOut(auth);
-        showError("الحساب غير مسجل لدينا");
-        setIsProcessing(false);
-        setLoading(false);
-        return;
-      }
-
+      // إذا كان Redirect، سيتم التعامل معه في AuthProvider
+      // إذا كان Popup، سيتم التوجيه هنا
       if (typeof window !== "undefined") {
-        localStorage.setItem("userName", user.displayName || user.email);
-
-        if (rememberMe) {
+        const savedUser = localStorage.getItem("userName");
+        if (savedUser && rememberMe) {
           localStorage.setItem("rememberMe", "true");
         }
       }
-
-      showSuccess("تم تسجيل الدخول بنجاح");
-      // الانتقال مباشرة بعد التحقق
-      router.push("/home");
     } catch (err) {
       setIsProcessing(false);
-      
-      // معالجة الأخطاء بدون طباعة في Console للأخطاء الطبيعية
-      if (err.code === "auth/popup-closed-by-user") {
-        // هذا خطأ طبيعي عندما يغلق المستخدم النافذة - لا نطبع في Console
-        // لا نعرض رسالة خطأ للمستخدم لأنه إجراء طبيعي
-      } else if (err.code === "auth/operation-not-allowed") {
-        console.error("Google sign-in error:", err);
-        showError("تسجيل الدخول بـ Google غير مفعّل في Firebase Console");
-      } else if (err.code === "auth/unauthorized-domain") {
-        console.error("Google sign-in error:", err);
-        showError(
-          "النطاق الحالي غير مصرح به. يرجى إضافة النطاق في Firebase Console:\n" +
-          "Authentication > Settings > Authorized domains > Add domain\n" +
-          "أضف: localhost"
-        );
-      } else {
-        // طباعة الأخطاء الأخرى في Console للمساعدة في التطوير
-        console.error("Google sign-in error:", err);
-        showError("حدث خطأ أثناء تسجيل الدخول بـ Google. يرجى المحاولة مرة أخرى");
-      }
+      // الأخطاء يتم التعامل معها في AuthProvider
     } finally {
       setLoading(false);
     }
