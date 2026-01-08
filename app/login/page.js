@@ -51,28 +51,43 @@ export default function LoginPage() {
   }, []);
 
 
-  const saveUserToFirestore = useCallback(async (user, displayNameFallback = null) => {
+  const saveUserToFirestore = useCallback(async (user, displayNameFallback = null, isNewUser = false) => {
     try {
       const userDocRef = doc(db, "users", user.uid);
       const displayName = user.displayName || displayNameFallback || user.email || "";
       
-      await setDoc(
-        userDocRef,
-        {
-          uid: user.uid,
-          name: displayName,
-          email: user.email,
-          photoURL: user.photoURL || null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // التحقق من وجود المستخدم أولاً
+      const userDoc = await getDoc(userDocRef);
+      const userExists = userDoc.exists();
+      
+      // إعداد البيانات
+      const userData = {
+        uid: user.uid,
+        name: displayName,
+        email: user.email,
+        photoURL: user.photoURL || null,
+        updatedAt: serverTimestamp(),
+      };
+      
+      // إذا كان مستخدم جديد، أضف role و createdAt
+      if (isNewUser || !userExists) {
+        userData.role = "user"; // القيمة الافتراضية
+        userData.createdAt = serverTimestamp();
+      }
+      // إذا كان المستخدم موجوداً، احتفظ بالـ role الموجود
+      else if (userDoc.exists() && userDoc.data().role) {
+        userData.role = userDoc.data().role;
+      } else {
+        // إذا لم يكن هناك role، أضفه
+        userData.role = "user";
+      }
+      
+      await setDoc(userDocRef, userData, { merge: true });
       
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const userDoc = await getDoc(userDocRef);
-      if (!userDoc.exists()) {
+      const verifyDoc = await getDoc(userDocRef);
+      if (!verifyDoc.exists()) {
         throw new Error("Document was not created after setDoc");
       }
     } catch (err) {
@@ -167,7 +182,7 @@ export default function LoginPage() {
         
         // Save user to Firestore
         try {
-          await saveUserToFirestore(user, name);
+          await saveUserToFirestore(user, name, true); // isNewUser = true (حساب جديد)
           
           // Verify document creation
           let verified = await checkUserExists(user.uid);
@@ -181,7 +196,7 @@ export default function LoginPage() {
           
           if (!verified) {
             // Final retry
-            await saveUserToFirestore(user, name);
+            await saveUserToFirestore(user, name, true); // isNewUser = true
             await new Promise(resolve => setTimeout(resolve, 200));
             verified = await checkUserExists(user.uid);
             

@@ -41,28 +41,43 @@ function AuthProviderInner({ children, showSuccess, showError }) {
   };
 
   // دالة لحفظ المستخدم في Firestore
-  const saveUserToFirestore = async (user, displayNameFallback = null) => {
+  const saveUserToFirestore = async (user, displayNameFallback = null, isNewUser = false) => {
     try {
       const userDocRef = doc(db, "users", user.uid);
       const displayName = user.displayName || displayNameFallback || user.email || "";
       
-      await setDoc(
-        userDocRef,
-        {
-          uid: user.uid,
-          name: displayName,
-          email: user.email,
-          photoURL: user.photoURL || null,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // التحقق من وجود المستخدم أولاً
+      const userDoc = await getDoc(userDocRef);
+      const userExists = userDoc.exists();
+      
+      // إعداد البيانات
+      const userData = {
+        uid: user.uid,
+        name: displayName,
+        email: user.email,
+        photoURL: user.photoURL || null,
+        updatedAt: serverTimestamp(),
+      };
+      
+      // إذا كان مستخدم جديد، أضف role و createdAt
+      if (isNewUser || !userExists) {
+        userData.role = "user"; // القيمة الافتراضية
+        userData.createdAt = serverTimestamp();
+      }
+      // إذا كان المستخدم موجوداً، احتفظ بالـ role الموجود
+      else if (userDoc.exists() && userDoc.data().role) {
+        userData.role = userDoc.data().role;
+      } else {
+        // إذا لم يكن هناك role، أضفه
+        userData.role = "user";
+      }
+      
+      await setDoc(userDocRef, userData, { merge: true });
       
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const userDoc = await getDoc(userDocRef);
-      if (!userDoc.exists()) {
+      const verifyDoc = await getDoc(userDocRef);
+      if (!verifyDoc.exists()) {
         throw new Error("Document was not created after setDoc");
       }
     } catch (err) {
@@ -117,7 +132,7 @@ function AuthProviderInner({ children, showSuccess, showError }) {
       if (!userExists) {
         // المستخدم غير موجود - إنشاء مستند جديد
         try {
-          await saveUserToFirestore(user, null);
+          await saveUserToFirestore(user, null, true); // isNewUser = true
           
           // التحقق مرة أخرى من إنشاء المستند
           let verified = await checkUserExists(user.uid);
@@ -131,7 +146,7 @@ function AuthProviderInner({ children, showSuccess, showError }) {
           
           if (!verified) {
             // Final retry
-            await saveUserToFirestore(user, null);
+            await saveUserToFirestore(user, null, true); // isNewUser = true
             await new Promise(resolve => setTimeout(resolve, 200));
             verified = await checkUserExists(user.uid);
             
@@ -147,8 +162,8 @@ function AuthProviderInner({ children, showSuccess, showError }) {
           return;
         }
       } else {
-        // المستخدم موجود - تحديث البيانات
-        await saveUserToFirestore(user, null);
+        // المستخدم موجود - تحديث البيانات (بدون تغيير role)
+        await saveUserToFirestore(user, null, false); // isNewUser = false
       }
 
       // حفظ البيانات في localStorage

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
 import { FaTrashAlt, FaArrowRight, FaBars } from "react-icons/fa";
 import ConfirmModal from "../components/ConfirmModal";
@@ -112,7 +112,7 @@ export default function AdminPage() {
       const userDocRef = doc(db, "users", userId);
       await updateDoc(userDocRef, {
         role: newRole,
-        updatedAt: new Date().toISOString(),
+        updatedAt: serverTimestamp(),
       });
 
       // تحديث القائمة المحلية
