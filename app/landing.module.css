@@ -1,0 +1,115 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  transition: background-color 0.3s ease;
+  padding: 24px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+}
+
+.logoContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.logo {
+  font-size: 64px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 3px;
+  animation: gradientShift 3s ease infinite;
+}
+
+.tagline {
+  font-size: 20px;
+  color: var(--text-secondary);
+  margin: 0;
+  font-weight: 500;
+  animation: fadeIn 1s ease-out 0.3s both;
+}
+
+.loadingIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid var(--bg-secondary);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (max-width: 768px) {
+  .logo {
+    font-size: 48px;
+    letter-spacing: 2px;
+  }
+
+  .tagline {
+    font-size: 18px;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+  }
+}
+

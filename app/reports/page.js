@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { FaBars } from "react-icons/fa";
@@ -34,20 +34,37 @@ export default function ReportsPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
         try {
+          // التحقق من وجود المستخدم في Firestore (Auth Guard)
           const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-          if (userDoc.exists()) {
-            setUserRole(userDoc.data().role || "user");
-          } else {
-            setUserRole("user");
+          
+          if (!userDoc.exists()) {
+            // المستخدم غير موجود في Firestore - تسجيل الخروج وإعادة التوجيه
+            await signOut(auth);
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("userName");
+              localStorage.removeItem("rememberMe");
+            }
+            router.push("/login");
+            return;
           }
+
+          // المستخدم موجود - متابعة التحميل
+          setUser(currentUser);
+          const userData = userDoc.data();
+          setUserRole(userData.role || "user");
         } catch (error) {
           console.error("Error fetching user data:", error);
-          setUserRole("user");
+          // في حالة الخطأ، تسجيل الخروج وإعادة التوجيه
+          await signOut(auth);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("userName");
+            localStorage.removeItem("rememberMe");
+          }
+          router.push("/login");
         }
       } else {
-        router.push("/");
+        router.push("/login");
       }
       setLoading(false);
     });

@@ -73,33 +73,50 @@ export default function HomePage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
-        const name = currentUser.displayName || currentUser.email || "";
-        setUserName(name);
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("userName", name);
-        }
-
         try {
+          // التحقق من وجود المستخدم في Firestore (Auth Guard)
           const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-          if (userDoc.exists()) {
-            setUserRole(userDoc.data().role || "user");
-            const userData = userDoc.data();
-            if (userData.budget) {
-              setBudget(userData.budget);
+          
+          if (!userDoc.exists()) {
+            // المستخدم غير موجود في Firestore - تسجيل الخروج وإعادة التوجيه
+            await signOut(auth);
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("userName");
+              localStorage.removeItem("rememberMe");
             }
-          } else {
-            setUserRole("user");
+            router.push("/login");
+            return;
           }
+
+          // المستخدم موجود - متابعة التحميل
+          setUser(currentUser);
+          const name = currentUser.displayName || currentUser.email || "";
+          setUserName(name);
+
+          if (typeof window !== "undefined") {
+            localStorage.setItem("userName", name);
+          }
+
+          const userData = userDoc.data();
+          setUserRole(userData.role || "user");
+          
+          if (userData.budget) {
+            setBudget(userData.budget);
+          }
+
+          await fetchExpenses(currentUser.uid);
         } catch (error) {
           console.error("Error fetching user data:", error);
-          setUserRole("user");
+          // في حالة الخطأ، تسجيل الخروج وإعادة التوجيه
+          await signOut(auth);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("userName");
+            localStorage.removeItem("rememberMe");
+          }
+          router.push("/login");
         }
-
-        await fetchExpenses(currentUser.uid);
       } else {
-        router.push("/");
+        router.push("/login");
       }
       setLoading(false);
     });
@@ -401,7 +418,7 @@ export default function HomePage() {
         localStorage.removeItem("userName");
         localStorage.removeItem("rememberMe");
       }
-      router.push("/");
+      router.push("/login");
     } catch (error) {
       console.error("Error signing out:", error);
       showError("حدث خطأ أثناء تسجيل الخروج");

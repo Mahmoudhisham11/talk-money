@@ -22,6 +22,28 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const themeMode = localStorage.getItem('themeMode') || 'system';
+                  let resolvedTheme = themeMode;
+                  
+                  if (themeMode === 'system') {
+                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    resolvedTheme = prefersDark ? 'dark' : 'light';
+                  }
+                  
+                  document.documentElement.setAttribute('data-theme', resolvedTheme);
+                } catch (e) {
+                  // Fallback to light theme if there's an error
+                  document.documentElement.setAttribute('data-theme', 'light');
+                }
+              })();
+            `,
+          }}
+        />
         <link
           rel="icon"
           type="image/png"

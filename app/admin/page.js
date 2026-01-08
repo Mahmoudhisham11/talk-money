@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { collection, getDocs, getDoc, doc, updateDoc, deleteDoc, query, orderBy } from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
@@ -42,22 +42,46 @@ export default function AdminPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
-        // التحقق من role المستخدم
-        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-        const userData = userDoc.data();
+        try {
+          // التحقق من وجود المستخدم في Firestore (Auth Guard)
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          
+          if (!userDoc.exists()) {
+            // المستخدم غير موجود في Firestore - تسجيل الخروج وإعادة التوجيه
+            await signOut(auth);
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("userName");
+              localStorage.removeItem("rememberMe");
+            }
+            router.push("/login");
+            return;
+          }
 
-        if (userData?.role !== "admin") {
-          router.push("/home");
-          return;
+          // المستخدم موجود - التحقق من role
+          setUser(currentUser);
+          const userData = userDoc.data();
+
+          if (userData?.role !== "admin") {
+            router.push("/home");
+            return;
+          }
+
+          setUserRole(userData?.role || "admin");
+
+          // جلب جميع المستخدمين
+          await fetchUsers();
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          // في حالة الخطأ، تسجيل الخروج وإعادة التوجيه
+          await signOut(auth);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("userName");
+            localStorage.removeItem("rememberMe");
+          }
+          router.push("/login");
         }
-
-        setUserRole(userData?.role || "admin");
-
-        // جلب جميع المستخدمين
-        await fetchUsers();
       } else {
-        router.push("/");
+        router.push("/login");
       }
       setLoading(false);
     });
