@@ -110,12 +110,14 @@ export default function LoginPage() {
   useEffect(() => {
     let mounted = true;
     let unsubscribe = null;
+    let redirectHandled = false; // Flag لمنع onAuthStateChanged من التداخل مع getRedirectResult
 
     const initAuth = async () => {
       try {
         // 1️⃣ تحقق من Google Redirect أولاً (مهم لـ iOS/PWA)
         const result = await getRedirectResult(auth);
         if (result && result.user) {
+          redirectHandled = true; // تم التعامل مع Redirect
           const user = result.user;
           
           // التحقق من وجود المستخدم في Firestore
@@ -123,18 +125,55 @@ export default function LoginPage() {
           
           if (!userExists) {
             // إنشاء مستند المستخدم
-            await ensureUserDoc(user, null);
-            
-            // التحقق مرة أخرى
-            const verified = await checkUserExists(user.uid);
-            if (!verified) {
+            try {
+              await ensureUserDoc(user, null);
+              
+              // التحقق مرة أخرى مع retry
+              let verified = false;
+              let retries = 5;
+              while (!verified && retries > 0) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+                verified = await checkUserExists(user.uid);
+                retries--;
+              }
+              
+              if (!verified) {
+                // محاولة إنشاء المستند مرة أخرى
+                await ensureUserDoc(user, null);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                verified = await checkUserExists(user.uid);
+                
+                if (!verified) {
+                  await signOut(auth);
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem("userName");
+                  }
+                  showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
+                  if (mounted) {
+                    setInitialLoading(false);
+                  }
+                  return;
+                }
+              }
+            } catch (docError) {
+              console.error("Error creating user document:", docError);
               await signOut(auth);
               if (typeof window !== "undefined") {
                 localStorage.removeItem("userName");
               }
               showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
-              setInitialLoading(false);
+              if (mounted) {
+                setInitialLoading(false);
+              }
               return;
+            }
+          } else {
+            // التأكد من تحديث البيانات
+            try {
+              await ensureUserDoc(user, null);
+            } catch (updateError) {
+              console.error("Error updating user doc:", updateError);
+              // نستمر حتى لو فشل التحديث
             }
           }
 
@@ -149,9 +188,14 @@ export default function LoginPage() {
           return;
         }
 
-        // 2️⃣ تحقق من حالة المصادقة العادية
+        // 2️⃣ تحقق من حالة المصادقة العادية (فقط إذا لم يتم التعامل مع Redirect)
         unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (!mounted) return;
+          
+          // تجاهل onAuthStateChanged إذا تم التعامل مع Redirect بالفعل
+          if (redirectHandled) {
+            return;
+          }
           
           if (user) {
             // إعطاء وقت لإنشاء المستند في Firestore (مهم عند إنشاء حساب جديد)
@@ -165,15 +209,24 @@ export default function LoginPage() {
               try {
                 await ensureUserDoc(user, null);
                 
-                // التحقق مرة أخرى
-                const verified = await checkUserExists(user.uid);
+                // التحقق مرة أخرى مع retry
+                let verified = false;
+                let retries = 5;
+                while (!verified && retries > 0) {
+                  await new Promise(resolve => setTimeout(resolve, 200));
+                  verified = await checkUserExists(user.uid);
+                  retries--;
+                }
+                
                 if (!verified) {
                   // المستخدم غير موجود في Firestore - تسجيل الخروج
                   await signOut(auth);
                   if (typeof window !== "undefined") {
                     localStorage.removeItem("userName");
                   }
-                  setInitialLoading(false);
+                  if (mounted) {
+                    setInitialLoading(false);
+                  }
                   return;
                 }
               } catch (ensureError) {
@@ -182,7 +235,9 @@ export default function LoginPage() {
                 if (typeof window !== "undefined") {
                   localStorage.removeItem("userName");
                 }
-                setInitialLoading(false);
+                if (mounted) {
+                  setInitialLoading(false);
+                }
                 return;
               }
             } else {
@@ -201,7 +256,9 @@ export default function LoginPage() {
             
             router.push("/home");
           } else {
-            setInitialLoading(false);
+            if (mounted) {
+              setInitialLoading(false);
+            }
           }
         });
 
@@ -210,6 +267,13 @@ export default function LoginPage() {
         if (mounted) {
           setInitialLoading(false);
         }
+      } finally {
+        // إعادة تعيين initialLoading بعد فترة قصيرة كـ fallback
+        setTimeout(() => {
+          if (mounted && !redirectHandled) {
+            setInitialLoading(false);
+          }
+        }, 2000);
       }
     };
 

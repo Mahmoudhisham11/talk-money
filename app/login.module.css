@@ -126,16 +126,14 @@
   user-select: none;
 }
 
-.forgotPassword {
-  font-size: 14px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
 
-.forgotPassword:hover {
+.forgotPassword {
+  background-color: transparent;
+  font-size: 14px;
   color: #3b82f6;
   text-decoration: underline;
+  border: none;
+  cursor: pointer;
 }
 
 .submitButton {
