@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, db } from "../firebase";
 import { signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { FaRegEyeSlash } from "react-icons/fa";
 import { FaRegEye } from "react-icons/fa6";
 import { useTheme } from "../context/ThemeContext";
@@ -36,6 +37,7 @@ export default function LoginPage() {
   useEffect(() => {
     let mounted = true;
     let unsubscribe = null;
+    let redirectTimeout = null;
 
     const checkAuth = async () => {
       if (typeof window === "undefined") {
@@ -48,8 +50,31 @@ export default function LoginPage() {
         if (!mounted) return;
         
         if (user) {
-          // المستخدم مسجل دخول - التوجه إلى الصفحة الرئيسية
-          router.push("/home");
+          // إعطاء وقت لـ getRedirectResult في useAuthHandler للعمل أولاً
+          // هذا مهم جداً لـ iOS و PWA
+          redirectTimeout = setTimeout(async () => {
+            if (!mounted) return;
+            
+            try {
+              // التحقق من وجود المستخدم في Firestore قبل التوجيه
+              const userDoc = await getDoc(doc(db, "users", user.uid));
+              
+              if (userDoc.exists()) {
+                // المستخدم موجود في Firestore - التوجه إلى الصفحة الرئيسية
+                router.push("/home");
+              } else {
+                // المستخدم غير موجود في Firestore - تسجيل الخروج
+                await signOut(auth);
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("userName");
+                }
+                setInitialLoading(false);
+              }
+            } catch (error) {
+              console.error("Error checking user:", error);
+              setInitialLoading(false);
+            }
+          }, 500); // تأخير 500ms للسماح لـ getRedirectResult بالعمل
         } else {
           setInitialLoading(false);
         }
@@ -60,7 +85,7 @@ export default function LoginPage() {
         if (mounted) {
           setInitialLoading(false);
         }
-      }, 1000);
+      }, 2000);
     };
 
     checkAuth();
@@ -69,6 +94,9 @@ export default function LoginPage() {
       mounted = false;
       if (unsubscribe) {
         unsubscribe();
+      }
+      if (redirectTimeout) {
+        clearTimeout(redirectTimeout);
       }
     };
   }, [router]);
