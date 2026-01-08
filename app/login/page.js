@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   auth,
@@ -37,21 +37,49 @@ export default function LoginPage() {
   const { theme, toggleTheme } = useTheme();
   const { showSuccess, showError } = useNotifications();
 
-  const provider = new GoogleAuthProvider();
+  // إنشاء GoogleAuthProvider مرة واحدة فقط باستخدام useMemo
+  const provider = useMemo(() => {
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({
+      prompt: "select_account", // إجبار Google على إظهار شاشة اختيار الحساب
+    });
+    return googleProvider;
+  }, []);
 
   // ======== التحقق من وجود المستخدم في Firestore ========
+  const checkUserExists = async (uid) => {
+    try {
+      const userDocRef = doc(db, "users", uid);
+      const userDoc = await getDoc(userDocRef);
+      return userDoc.exists();
+    } catch (error) {
+      console.error("Error checking user existence:", error);
+      return false;
+    }
+  };
+
+  // ======== إنشاء أو تحديث مستند المستخدم في Firestore ========
   const ensureUserDoc = async (user, displayNameFallback) => {
     try {
       const userDocRef = doc(db, "users", user.uid);
-      const userDoc = await getDoc(userDocRef);
-      if (!userDoc.exists()) {
-        await setDoc(userDocRef, {
+      
+      // استخدام setDoc مباشرة مع merge: true لضمان الإنشاء
+      await setDoc(
+        userDocRef,
+        {
           email: user.email,
           displayName: user.displayName || displayNameFallback || user.email,
           role: "user",
           createdAt: serverTimestamp(),
           uid: user.uid,
-        });
+        },
+        { merge: true }
+      );
+      
+      // التحقق من إنشاء المستند
+      const userDoc = await getDoc(userDocRef);
+      if (!userDoc.exists()) {
+        throw new Error("فشل إنشاء مستند المستخدم في Firestore");
       }
     } catch (err) {
       console.error("Error ensuring user document:", err);
@@ -59,29 +87,118 @@ export default function LoginPage() {
     }
   };
 
+  // ======== الكشف عن نوع الجهاز ========
+  const detectDeviceType = () => {
+    if (typeof window === "undefined") {
+      return { shouldUseRedirect: false };
+    }
+
+    const userAgent = navigator.userAgent;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+    const isAndroid = /Android/.test(userAgent);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isPWA = window.matchMedia("(display-mode: standalone)").matches;
+
+    // استخدام Redirect في Safari و iOS و Android Mobile و PWA
+    const shouldUseRedirect = isSafari || isIOS || (isAndroid && isMobile) || isPWA;
+
+    return { shouldUseRedirect };
+  };
+
   // ======== التحقق من حالة المصادقة عند تحميل الصفحة ========
   useEffect(() => {
     let mounted = true;
+    let unsubscribe = null;
 
     const initAuth = async () => {
       try {
-        // 1️⃣ تحقق من Google Redirect
+        // 1️⃣ تحقق من Google Redirect أولاً (مهم لـ iOS/PWA)
         const result = await getRedirectResult(auth);
         if (result && result.user) {
           const user = result.user;
-          await ensureUserDoc(user, name);
-          localStorage.setItem("userName", user.displayName || user.email);
+          
+          // التحقق من وجود المستخدم في Firestore
+          const userExists = await checkUserExists(user.uid);
+          
+          if (!userExists) {
+            // إنشاء مستند المستخدم
+            await ensureUserDoc(user, null);
+            
+            // التحقق مرة أخرى
+            const verified = await checkUserExists(user.uid);
+            if (!verified) {
+              await signOut(auth);
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("userName");
+              }
+              showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
+              setInitialLoading(false);
+              return;
+            }
+          }
+
+          // حفظ بيانات المستخدم
+          if (typeof window !== "undefined") {
+            localStorage.setItem("userName", user.displayName || user.email || "");
+          }
+
           if (!mounted) return;
+          showSuccess("تم تسجيل الدخول بنجاح");
           router.push("/home");
           return;
         }
 
         // 2️⃣ تحقق من حالة المصادقة العادية
-        onAuthStateChanged(auth, async (user) => {
+        unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (!mounted) return;
+          
           if (user) {
-            await ensureUserDoc(user, name);
-            localStorage.setItem("userName", user.displayName || user.email);
+            // إعطاء وقت لإنشاء المستند في Firestore (مهم عند إنشاء حساب جديد)
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // التحقق من وجود المستخدم في Firestore قبل التوجيه
+            const userExists = await checkUserExists(user.uid);
+            
+            if (!userExists) {
+              // المستخدم غير موجود في Firestore - محاولة إنشاء المستند
+              try {
+                await ensureUserDoc(user, null);
+                
+                // التحقق مرة أخرى
+                const verified = await checkUserExists(user.uid);
+                if (!verified) {
+                  // المستخدم غير موجود في Firestore - تسجيل الخروج
+                  await signOut(auth);
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem("userName");
+                  }
+                  setInitialLoading(false);
+                  return;
+                }
+              } catch (ensureError) {
+                console.error("Error ensuring user doc in onAuthStateChanged:", ensureError);
+                await signOut(auth);
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("userName");
+                }
+                setInitialLoading(false);
+                return;
+              }
+            } else {
+              // المستخدم موجود - التأكد من تحديث البيانات
+              try {
+                await ensureUserDoc(user, null);
+              } catch (updateError) {
+                console.error("Error updating user doc:", updateError);
+                // نستمر حتى لو فشل التحديث
+              }
+            }
+            
+            if (typeof window !== "undefined") {
+              localStorage.setItem("userName", user.displayName || user.email || "");
+            }
+            
             router.push("/home");
           } else {
             setInitialLoading(false);
@@ -90,7 +207,9 @@ export default function LoginPage() {
 
       } catch (err) {
         console.error("Auth init error:", err);
-        setInitialLoading(false);
+        if (mounted) {
+          setInitialLoading(false);
+        }
       }
     };
 
@@ -98,16 +217,26 @@ export default function LoginPage() {
 
     return () => {
       mounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
-  }, [router, name]);
+  }, [router, showSuccess, showError]);
 
   // ======== تسجيل الدخول أو إنشاء حساب بالبريد ========
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    if (!email || !password || (!isLogin && !name.trim())) {
+    // التحقق من صحة المدخلات
+    if (!email || !password) {
       showError("يرجى ملء جميع الحقول المطلوبة");
+      setLoading(false);
+      return;
+    }
+
+    if (!isLogin && !name.trim()) {
+      showError("يرجى إدخال الاسم");
       setLoading(false);
       return;
     }
@@ -127,26 +256,110 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
+        // تسجيل الدخول
         const { user } = await signInWithEmailAndPassword(auth, email, password);
-        await ensureUserDoc(user, name);
-        localStorage.setItem("userName", user.displayName || user.email);
+        
+        // التحقق من وجود المستخدم في Firestore
+        const userExists = await checkUserExists(user.uid);
+        
+        if (!userExists) {
+          // المستخدم غير موجود في Firestore - تسجيل الخروج
+          await signOut(auth);
+          showError("الحساب غير مسجل لدينا");
+          setLoading(false);
+          return;
+        }
+
+        // التأكد من تحديث البيانات
+        await ensureUserDoc(user, null);
+        localStorage.setItem("userName", user.displayName || user.email || "");
         showSuccess("تم تسجيل الدخول بنجاح");
         router.push("/home");
       } else {
+        // إنشاء حساب جديد
         await signOut(auth); // تسجيل خروج من أي حساب موجود
+        
         const { user } = await createUserWithEmailAndPassword(auth, email, password);
-        if (name) await updateProfile(user, { displayName: name });
-        await ensureUserDoc(user, name);
-        localStorage.setItem("userName", name || user.email);
+        
+        // تحديث اسم المستخدم أولاً
+        if (name && name.trim()) {
+          try {
+            await updateProfile(user, { displayName: name });
+            // انتظار قليلاً للتأكد من تحديث displayName في Firebase Auth
+            await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (profileError) {
+            console.error("Error updating profile:", profileError);
+            // نستمر حتى لو فشل تحديث الاسم
+          }
+        }
+        
+        // إنشاء مستند المستخدم في Firestore
+        try {
+          // استخدام name مباشرة لأن updateProfile قد لا يكون محدثاً بعد
+          await ensureUserDoc(user, name);
+          
+          // التحقق من إنشاء المستند مع retry mechanism
+          let verified = false;
+          let retries = 5;
+          
+          while (!verified && retries > 0) {
+            // انتظار قليلاً قبل التحقق
+            await new Promise(resolve => setTimeout(resolve, 200));
+            verified = await checkUserExists(user.uid);
+            retries--;
+          }
+          
+          if (!verified) {
+            // محاولة إنشاء المستند مرة أخرى
+            console.log("Retrying user document creation...");
+            await ensureUserDoc(user, name);
+            
+            // انتظار أطول قبل التحقق مرة أخرى
+            await new Promise(resolve => setTimeout(resolve, 500));
+            verified = await checkUserExists(user.uid);
+            
+            if (!verified) {
+              console.error("Failed to create user document after retry");
+              await signOut(auth);
+              showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (docError) {
+          console.error("Error creating user document:", docError);
+          await signOut(auth);
+          showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
+          setLoading(false);
+          return;
+        }
+        
+        // حفظ بيانات المستخدم
+        localStorage.setItem("userName", name || user.email || "");
         showSuccess("تم إنشاء الحساب بنجاح");
         router.push("/home");
       }
     } catch (err) {
       console.error("Email auth error:", err);
-      if (err.code === "auth/user-not-found") showError("المستخدم غير موجود");
-      else if (err.code === "auth/wrong-password") showError("كلمة المرور غير صحيحة");
-      else if (err.code === "auth/email-already-in-use") showError("البريد مستخدم بالفعل");
-      else showError(err.message || "حدث خطأ. حاول مرة أخرى");
+      
+      // معالجة الأخطاء بشكل شامل
+      if (err.code === "auth/user-not-found") {
+        showError("المستخدم غير موجود");
+      } else if (err.code === "auth/wrong-password") {
+        showError("كلمة المرور غير صحيحة");
+      } else if (err.code === "auth/email-already-in-use") {
+        showError("البريد الإلكتروني مستخدم بالفعل. يرجى تسجيل الدخول بدلاً من إنشاء حساب جديد");
+      } else if (err.code === "auth/invalid-email") {
+        showError("البريد الإلكتروني غير صحيح");
+      } else if (err.code === "auth/weak-password") {
+        showError("كلمة المرور ضعيفة (يجب أن تكون 6 أحرف على الأقل)");
+      } else if (err.code === "auth/network-request-failed") {
+        showError("مشكلة في الاتصال بالشبكة. يرجى المحاولة مرة أخرى");
+      } else if (err.code === "auth/too-many-requests") {
+        showError("تم تجاوز عدد المحاولات المسموح بها. يرجى المحاولة لاحقاً");
+      } else {
+        showError(err.message || "حدث خطأ. حاول مرة أخرى");
+      }
     } finally {
       setLoading(false);
     }
@@ -155,27 +368,80 @@ export default function LoginPage() {
   // ======== تسجيل الدخول باستخدام Google ========
   const handleGoogleSignIn = async () => {
     setLoading(true);
+    
     try {
-      if (
-        /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-        window.matchMedia("(display-mode: standalone)").matches
-      ) {
-        // iOS / PWA → Redirect
+      // تسجيل الخروج أولاً لإجبار اختيار الحساب
+      try {
+        await signOut(auth);
+      } catch (signOutError) {
+        // تجاهل خطأ تسجيل الخروج إذا لم يكن هناك مستخدم مسجل دخول
+      }
+
+      // الكشف عن نوع الجهاز
+      const deviceInfo = detectDeviceType();
+
+      if (deviceInfo.shouldUseRedirect) {
+        // iOS / PWA / Safari / Android Mobile → Redirect
         await signInWithRedirect(auth, provider);
+        // لا نضع setLoading(false) هنا لأن الصفحة سيتم إعادة تحميلها
+        // getRedirectResult سيتعامل مع النتيجة في useEffect
       } else {
         // باقي الأجهزة → Popup
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        await ensureUserDoc(user, name);
-        localStorage.setItem("userName", user.displayName || user.email);
-        router.push("/home");
+        try {
+          const result = await signInWithPopup(auth, provider);
+          const user = result.user;
+          
+          // التحقق من وجود المستخدم في Firestore
+          const userExists = await checkUserExists(user.uid);
+          
+          if (!userExists) {
+            // إنشاء مستند المستخدم
+            await ensureUserDoc(user, null);
+            
+            // التحقق مرة أخرى
+            const verified = await checkUserExists(user.uid);
+            if (!verified) {
+              await signOut(auth);
+              showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
+              setLoading(false);
+              return;
+            }
+          } else {
+            // التأكد من تحديث البيانات
+            await ensureUserDoc(user, null);
+          }
+          
+          localStorage.setItem("userName", user.displayName || user.email || "");
+          showSuccess("تم تسجيل الدخول بنجاح");
+          router.push("/home");
+        } catch (popupError) {
+          // إذا فشل Popup، استخدم Redirect كبديل
+          if (
+            popupError.code === "auth/popup-blocked" ||
+            popupError.code === "auth/popup-closed-by-user"
+          ) {
+            setLoading(false);
+            await signInWithRedirect(auth, provider);
+            return;
+          } else {
+            throw popupError;
+          }
+        } finally {
+          setLoading(false);
+        }
       }
     } catch (err) {
       console.error("Google sign-in error:", err);
-      if (err.code !== "auth/popup-closed-by-user") {
+      
+      // معالجة الأخطاء
+      if (err.code === "auth/operation-not-allowed") {
+        showError("تسجيل الدخول بـ Google غير مفعّل في Firebase Console");
+      } else if (err.code === "auth/unauthorized-domain") {
+        showError("النطاق الحالي غير مصرح به. يرجى إضافة النطاق في Firebase Console");
+      } else if (err.code !== "auth/popup-closed-by-user") {
         showError(err.message || "فشل تسجيل الدخول باستخدام Google");
       }
-    } finally {
+      
       setLoading(false);
     }
   };
@@ -199,6 +465,7 @@ export default function LoginPage() {
         onClick={toggleTheme}
         className={styles.themeToggle}
         title={theme === "light" ? "التبديل إلى الوضع الداكن" : "التبديل إلى الوضع الفاتح"}
+        aria-label="تبديل الوضع"
       >
         {theme === "light" ? "🌙" : "☀️"}
       </button>
@@ -231,7 +498,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="example@gmail.com"
               required
-                className={styles.input}
+              className={styles.input}
             />
           </div>
 
@@ -249,6 +516,14 @@ export default function LoginPage() {
               <span
                 className={styles.eyeIcon}
                 onClick={() => setShowPassword(!showPassword)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    setShowPassword(!showPassword);
+                  }
+                }}
+                aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
               >
                 {showPassword ? <FaRegEyeSlash /> : <FaRegEye />}
               </span>
@@ -259,6 +534,7 @@ export default function LoginPage() {
             <div className={styles.rememberForgot}>
               <button
                 type="button"
+                onClick={() => {/* TODO: Implement forgot password */}}
                 className={styles.forgotPassword}
               >
                 نسيت كلمة المرور؟
@@ -285,11 +561,26 @@ export default function LoginPage() {
             disabled={loading}
             className={`${styles.socialButton} ${styles.google}`}
             title="تسجيل الدخول باستخدام Google"
+            aria-label="تسجيل الدخول باستخدام Google"
           >
             G
           </button>
-          <button disabled className={`${styles.socialButton} ${styles.facebook}`} title="قريباً">f</button>
-          <button disabled className={`${styles.socialButton} ${styles.twitter}`} title="قريباً">🐦</button>
+          <button 
+            disabled 
+            className={`${styles.socialButton} ${styles.facebook}`} 
+            title="قريباً"
+            aria-label="تسجيل الدخول باستخدام Facebook (قريباً)"
+          >
+            f
+          </button>
+          <button 
+            disabled 
+            className={`${styles.socialButton} ${styles.twitter}`} 
+            title="قريباً"
+            aria-label="تسجيل الدخول باستخدام Twitter (قريباً)"
+          >
+            🐦
+          </button>
         </div>
 
         <div className={styles.switchLink}>
@@ -303,6 +594,7 @@ export default function LoginPage() {
               setShowPassword(false);
             }}
             className={styles.switchButton}
+            aria-label={isLogin ? "الانتقال إلى إنشاء حساب" : "الانتقال إلى تسجيل الدخول"}
           >
             {isLogin ? "سجل الآن" : "تسجيل الدخول"}
           </button>
