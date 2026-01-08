@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth, db } from "../firebase";
+import { db } from "../firebase";
 import {
   doc,
   getDoc,
@@ -16,6 +15,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 import { FaCog, FaUsers, FaBars } from "react-icons/fa";
 import BudgetSlider from "../components/BudgetSlider";
 import ExpenseList from "../components/ExpenseList";
@@ -26,8 +26,9 @@ import ConfirmModal from "../components/ConfirmModal";
 import ProfileDropdown from "../components/ProfileDropdown";
 import styles from "./home.module.css";
 import SideBar from "../components/Sidebar";
+
 export default function HomePage() {
-  const [user, setUser] = useState(null);
+  const { user, loading: authLoading, signOut } = useAuth();
   const [userRole, setUserRole] = useState(null);
   const [userName, setUserName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -70,59 +71,58 @@ export default function HomePage() {
   const router = useRouter();
   const { showSuccess, showError } = useNotifications();
 
+  // Load user data when user is authenticated
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        try {
-          // التحقق من وجود المستخدم في Firestore (Auth Guard)
-          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-          
-          if (!userDoc.exists()) {
-            // المستخدم غير موجود في Firestore - تسجيل الخروج وإعادة التوجيه
-            await signOut(auth);
-            if (typeof window !== "undefined") {
-              localStorage.removeItem("userName");
-              localStorage.removeItem("rememberMe");
-            }
-            router.push("/login");
-            return;
-          }
-
-          // المستخدم موجود - متابعة التحميل
-          setUser(currentUser);
-          const name = currentUser.displayName || currentUser.email || "";
-          setUserName(name);
-
-          if (typeof window !== "undefined") {
-            localStorage.setItem("userName", name);
-          }
-
-          const userData = userDoc.data();
-          setUserRole(userData.role || "user");
-          
-          if (userData.budget) {
-            setBudget(userData.budget);
-          }
-
-          await fetchExpenses(currentUser.uid);
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-          // في حالة الخطأ، تسجيل الخروج وإعادة التوجيه
-          await signOut(auth);
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("userName");
-            localStorage.removeItem("rememberMe");
-          }
-          router.push("/login");
-        }
-      } else {
-        router.push("/login");
+    const loadUserData = async () => {
+      if (authLoading) {
+        return;
       }
-      setLoading(false);
-    });
 
-    return () => unsubscribe();
-  }, [router]);
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      try {
+        // Get user document from Firestore
+        const userDocRef = doc(db, "users", user.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (!userDoc.exists()) {
+          // User not found in Firestore - sign out
+          await signOut();
+          return;
+        }
+
+        // Set user data
+        const name = user.displayName || user.email || "";
+        setUserName(name);
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("userName", name);
+          if (user.photoURL) {
+            localStorage.setItem("userPhoto", user.photoURL);
+          }
+        }
+
+        const userData = userDoc.data();
+        setUserRole(userData.role || "user");
+
+        if (userData.budget) {
+          setBudget(userData.budget);
+        }
+
+        await fetchExpenses(user.uid);
+      } catch (error) {
+        showError("حدث خطأ أثناء جلب بيانات المستخدم");
+        await signOut();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, [user, authLoading, router, signOut, showError]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -413,19 +413,13 @@ export default function HomePage() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("userName");
-        localStorage.removeItem("rememberMe");
-      }
-      router.push("/login");
+      await signOut();
     } catch (error) {
-      console.error("Error signing out:", error);
       showError("حدث خطأ أثناء تسجيل الخروج");
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className={styles.loadingContainer}>
         <div className={styles.loadingText}>جاري التحميل...</div>
