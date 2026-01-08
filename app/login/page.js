@@ -110,25 +110,23 @@ export default function LoginPage() {
   useEffect(() => {
     let mounted = true;
     let unsubscribe = null;
-    let redirectHandled = false; // Flag لمنع onAuthStateChanged من التداخل مع getRedirectResult
-
+    let redirectHandled = false;
+  
     const initAuth = async () => {
       try {
-        // 1️⃣ تحقق من Google Redirect أولاً (مهم لـ iOS/PWA)
+        // 1️⃣ محاولة الحصول على نتيجة Google Redirect أولاً
         const result = await getRedirectResult(auth);
         if (result && result.user) {
-          redirectHandled = true; // تم التعامل مع Redirect
+          redirectHandled = true; // تأكيد أنه تم التعامل مع Redirect
           const user = result.user;
-          
-          // التحقق من وجود المستخدم في Firestore
-          const userExists = await checkUserExists(user.uid);
-          
-          if (!userExists) {
-            // إنشاء مستند المستخدم
-            try {
+  
+          try {
+            // التحقق من وجود مستند المستخدم في Firestore
+            const userExists = await checkUserExists(user.uid);
+            if (!userExists) {
               await ensureUserDoc(user, null);
-              
-              // التحقق مرة أخرى مع retry
+  
+              // retry للتأكد من الإنشاء
               let verified = false;
               let retries = 5;
               while (!verified && retries > 0) {
@@ -136,156 +134,85 @@ export default function LoginPage() {
                 verified = await checkUserExists(user.uid);
                 retries--;
               }
-              
+  
               if (!verified) {
-                // محاولة إنشاء المستند مرة أخرى
                 await ensureUserDoc(user, null);
                 await new Promise(resolve => setTimeout(resolve, 500));
                 verified = await checkUserExists(user.uid);
-                
                 if (!verified) {
                   await signOut(auth);
-                  if (typeof window !== "undefined") {
-                    localStorage.removeItem("userName");
-                  }
+                  if (typeof window !== "undefined") localStorage.removeItem("userName");
                   showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
-                  if (mounted) {
-                    setInitialLoading(false);
-                  }
+                  if (mounted) setInitialLoading(false);
                   return;
                 }
-              }
-            } catch (docError) {
-              console.error("Error creating user document:", docError);
-              await signOut(auth);
-              if (typeof window !== "undefined") {
-                localStorage.removeItem("userName");
-              }
-              showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
-              if (mounted) {
-                setInitialLoading(false);
-              }
-              return;
-            }
-          } else {
-            // التأكد من تحديث البيانات
-            try {
-              await ensureUserDoc(user, null);
-            } catch (updateError) {
-              console.error("Error updating user doc:", updateError);
-              // نستمر حتى لو فشل التحديث
-            }
-          }
-
-          // حفظ بيانات المستخدم
-          if (typeof window !== "undefined") {
-            localStorage.setItem("userName", user.displayName || user.email || "");
-          }
-
-          if (!mounted) return;
-          showSuccess("تم تسجيل الدخول بنجاح");
-          router.push("/home");
-          return;
-        }
-
-        // 2️⃣ تحقق من حالة المصادقة العادية (فقط إذا لم يتم التعامل مع Redirect)
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (!mounted) return;
-          
-          // تجاهل onAuthStateChanged إذا تم التعامل مع Redirect بالفعل
-          if (redirectHandled) {
-            return;
-          }
-          
-          if (user) {
-            // إعطاء وقت لإنشاء المستند في Firestore (مهم عند إنشاء حساب جديد)
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // التحقق من وجود المستخدم في Firestore قبل التوجيه
-            const userExists = await checkUserExists(user.uid);
-            
-            if (!userExists) {
-              // المستخدم غير موجود في Firestore - محاولة إنشاء المستند
-              try {
-                await ensureUserDoc(user, null);
-                
-                // التحقق مرة أخرى مع retry
-                let verified = false;
-                let retries = 5;
-                while (!verified && retries > 0) {
-                  await new Promise(resolve => setTimeout(resolve, 200));
-                  verified = await checkUserExists(user.uid);
-                  retries--;
-                }
-                
-                if (!verified) {
-                  // المستخدم غير موجود في Firestore - تسجيل الخروج
-                  await signOut(auth);
-                  if (typeof window !== "undefined") {
-                    localStorage.removeItem("userName");
-                  }
-                  if (mounted) {
-                    setInitialLoading(false);
-                  }
-                  return;
-                }
-              } catch (ensureError) {
-                console.error("Error ensuring user doc in onAuthStateChanged:", ensureError);
-                await signOut(auth);
-                if (typeof window !== "undefined") {
-                  localStorage.removeItem("userName");
-                }
-                if (mounted) {
-                  setInitialLoading(false);
-                }
-                return;
               }
             } else {
-              // المستخدم موجود - التأكد من تحديث البيانات
-              try {
-                await ensureUserDoc(user, null);
-              } catch (updateError) {
-                console.error("Error updating user doc:", updateError);
-                // نستمر حتى لو فشل التحديث
-              }
+              // تحديث بيانات المستخدم
+              await ensureUserDoc(user, null);
             }
-            
+  
+            // حفظ بيانات المستخدم
             if (typeof window !== "undefined") {
               localStorage.setItem("userName", user.displayName || user.email || "");
             }
-            
+  
+            if (!mounted) return;
+            showSuccess("تم تسجيل الدخول بنجاح");
             router.push("/home");
-          } else {
-            if (mounted) {
+            return;
+          } catch (err) {
+            console.error("Error handling redirected user:", err);
+            await signOut(auth);
+            if (typeof window !== "undefined") localStorage.removeItem("userName");
+            showError("حدث خطأ أثناء معالجة الحساب. يرجى المحاولة مرة أخرى");
+            if (mounted) setInitialLoading(false);
+            return;
+          }
+        }
+  
+        // 2️⃣ التعامل مع onAuthStateChanged فقط إذا لم يتم التعامل مع Redirect
+        unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (!mounted || redirectHandled) return; // منع التداخل مع Redirect
+          if (user) {
+            try {
+              const userExists = await checkUserExists(user.uid);
+              if (!userExists) {
+                await ensureUserDoc(user, null);
+              } else {
+                await ensureUserDoc(user, null);
+              }
+  
+              if (typeof window !== "undefined") {
+                localStorage.setItem("userName", user.displayName || user.email || "");
+              }
+  
+              router.push("/home");
+            } catch (err) {
+              console.error("Error in onAuthStateChanged:", err);
+              await signOut(auth);
+              if (typeof window !== "undefined") localStorage.removeItem("userName");
               setInitialLoading(false);
             }
-          }
-        });
-
-      } catch (err) {
-        console.error("Auth init error:", err);
-        if (mounted) {
-          setInitialLoading(false);
-        }
-      } finally {
-        // إعادة تعيين initialLoading بعد فترة قصيرة كـ fallback
-        setTimeout(() => {
-          if (mounted && !redirectHandled) {
+          } else {
             setInitialLoading(false);
           }
-        }, 2000);
+        });
+  
+      } catch (err) {
+        console.error("Auth init error:", err);
+        if (mounted) setInitialLoading(false);
       }
     };
-
+  
     initAuth();
-
+  
     return () => {
       mounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      if (unsubscribe) unsubscribe();
     };
   }, [router, showSuccess, showError]);
+  
 
   // ======== تسجيل الدخول أو إنشاء حساب بالبريد ========
   const handleSubmit = async (e) => {
