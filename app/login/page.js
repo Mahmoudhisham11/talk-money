@@ -2,20 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
+  signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
 } from "firebase/auth";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { FaRegEyeSlash } from "react-icons/fa";
 import { FaRegEye } from "react-icons/fa6";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { signOut } from "firebase/auth";
 import { useTheme } from "../context/ThemeContext";
 import { useNotifications } from "../context/NotificationContext";
-import { useAuth } from "../context/AuthContext";
 import styles from "../login.module.css";
 
 export default function LoginPage() {
@@ -27,13 +30,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { showSuccess, showError } = useNotifications();
-  const { signInWithGoogle } = useAuth();
 
-  // دالة مشتركة للتحقق من وجود المستخدم في Firestore
+  const provider = new GoogleAuthProvider();
+
+  // ======== التحقق من وجود المستخدم في Firestore ========
   const checkUserExists = async (uid) => {
     try {
       const userDocRef = doc(db, "users", uid);
@@ -45,66 +48,7 @@ export default function LoginPage() {
     }
   };
 
-  // التحقق من حالة تسجيل الدخول عند تحميل الصفحة فقط
-  useEffect(() => {
-    let mounted = true;
-    let unsubscribe = null;
-
-    const checkAuth = async () => {
-      if (typeof window === "undefined") {
-        setInitialLoading(false);
-        return;
-      }
-
-      // التحقق السريع من localStorage أولاً
-      const savedRememberMe = localStorage.getItem("rememberMe");
-      const savedUser = localStorage.getItem("userName");
-
-      if (savedRememberMe === "true" && savedUser) {
-        // التحقق من حالة المصادقة
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (!mounted) return;
-          
-          if (user && !isProcessing) {
-            // التحقق من وجود المستخدم في Firestore قبل إعادة التوجيه
-            try {
-              const userExists = await checkUserExists(user.uid);
-              if (userExists) {
-                // المستخدم موجود في Firestore - التوجه إلى الصفحة الرئيسية
-                router.push("/home");
-              } else {
-                // المستخدم غير موجود في Firestore - تسجيل الخروج
-                await signOut(auth);
-                if (typeof window !== "undefined") {
-                  localStorage.removeItem("userName");
-                  localStorage.removeItem("rememberMe");
-                }
-                setInitialLoading(false);
-              }
-            } catch (error) {
-              console.error("Error checking user:", error);
-              setInitialLoading(false);
-            }
-          } else {
-            setInitialLoading(false);
-          }
-        });
-      } else {
-        setInitialLoading(false);
-      }
-    };
-
-    checkAuth();
-
-    return () => {
-      mounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [router, isProcessing]);
-
-  // إنشاء مستند المستخدم في Firestore
+  // ======== إنشاء مستند المستخدم في Firestore ========
   const createUserDocument = async (user, userRole = "user") => {
     try {
       const userDocRef = doc(db, "users", user.uid);
@@ -121,15 +65,52 @@ export default function LoginPage() {
     }
   };
 
+  // ======== التحقق من حالة تسجيل الدخول عند تحميل الصفحة ========
+  useEffect(() => {
+    const handleAuthState = async (user) => {
+      if (user) {
+        const userExists = await checkUserExists(user.uid);
+        if (userExists) {
+          localStorage.setItem("userName", user.displayName || user.email);
+          router.push("/home");
+        } else {
+          await signOut(auth);
+        }
+      }
+      setInitialLoading(false);
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, handleAuthState);
+
+    // ======== التعامل مع Redirect بعد Google Sign-In ========
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result && result.user) {
+          const user = result.user;
+          const exists = await checkUserExists(user.uid);
+          if (!exists) {
+            await createUserDocument(user, "user");
+          }
+          localStorage.setItem("userName", user.displayName || user.email);
+          router.push("/home");
+        }
+      })
+      .catch((err) => {
+        console.error("Google Redirect Error:", err);
+        setInitialLoading(false);
+      });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  // ======== تسجيل الدخول / إنشاء حساب بالإيميل ========
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setIsProcessing(true);
 
-    if (!email || !password) {
+    if (!email || !password || (!isLogin && !name.trim())) {
       showError("يرجى ملء جميع الحقول المطلوبة");
       setLoading(false);
-      setIsProcessing(false);
       return;
     }
 
@@ -137,158 +118,77 @@ export default function LoginPage() {
     if (!emailRegex.test(email)) {
       showError("البريد الإلكتروني غير صحيح");
       setLoading(false);
-      setIsProcessing(false);
-      return;
-    }
-
-    if (password.length < 6) {
-      showError("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
-      setLoading(false);
-      setIsProcessing(false);
-      return;
-    }
-
-    if (!isLogin && !name.trim()) {
-      showError("يرجى إدخال الاسم");
-      setLoading(false);
-      setIsProcessing(false);
       return;
     }
 
     try {
       if (isLogin) {
-        const userCredential = await signInWithEmailAndPassword(
+        const { user } = await signInWithEmailAndPassword(
           auth,
           email,
           password
         );
-        const user = userCredential.user;
-
-        // التحقق من وجود المستخدم في Firestore
-        const userExists = await checkUserExists(user.uid);
-        
-        if (!userExists) {
-          // المستخدم غير موجود في Firestore - تسجيل الخروج
+        const exists = await checkUserExists(user.uid);
+        if (!exists) {
           await signOut(auth);
-          showError("الحساب غير مسجل لدينا");
-          setIsProcessing(false);
+          showError("الحساب غير موجود في النظام");
           setLoading(false);
           return;
         }
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("userName", user.displayName || user.email);
-
-          if (rememberMe) {
-            localStorage.setItem("rememberMe", "true");
-          } else {
-            localStorage.removeItem("rememberMe");
-          }
-        }
-
+        localStorage.setItem("userName", user.displayName || user.email);
+        if (rememberMe) localStorage.setItem("rememberMe", "true");
         showSuccess("تم تسجيل الدخول بنجاح");
-        // الانتقال مباشرة بعد التحقق
         router.push("/home");
       } else {
-        // تسجيل الخروج من أي حساب موجود قبل إنشاء حساب جديد
         try {
           await signOut(auth);
-        } catch (signOutError) {
-          // تجاهل خطأ تسجيل الخروج إذا لم يكن هناك مستخدم مسجل دخول
-        }
-
-        const userCredential = await createUserWithEmailAndPassword(
+        } catch {}
+        const { user } = await createUserWithEmailAndPassword(
           auth,
           email,
           password
         );
-        const user = userCredential.user;
-
-        if (name) {
-          await updateProfile(user, { displayName: name });
-        }
-
-        // إنشاء مستند المستخدم في Firestore مع role = "user"
+        if (name) await updateProfile(user, { displayName: name });
         await createUserDocument(user, "user");
-
-        // التحقق من إنشاء المستند بنجاح
-        const userExists = await checkUserExists(user.uid);
-        if (!userExists) {
-          await signOut(auth);
-          showError("حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى");
-          setIsProcessing(false);
-          setLoading(false);
-          return;
-        }
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("userName", name || user.email);
-
-          if (rememberMe) {
-            localStorage.setItem("rememberMe", "true");
-          } else {
-            localStorage.removeItem("rememberMe");
-          }
-        }
-
+        localStorage.setItem("userName", name || user.email);
+        if (rememberMe) localStorage.setItem("rememberMe", "true");
         showSuccess("تم إنشاء الحساب بنجاح");
-        // الانتقال مباشرة بعد التحقق
         router.push("/home");
       }
     } catch (err) {
-      setIsProcessing(false);
-      
-      // معالجة الأخطاء مع طباعة في Console فقط للأخطاء غير المتوقعة
-      if (err.code === "auth/email-already-in-use") {
-        showError("البريد الإلكتروني مستخدم بالفعل. يرجى تسجيل الدخول بدلاً من إنشاء حساب جديد");
-      } else if (err.code === "auth/invalid-email") {
-        showError("البريد الإلكتروني غير صحيح");
-      } else if (err.code === "auth/weak-password") {
-        showError("كلمة المرور ضعيفة (يجب أن تكون 6 أحرف على الأقل)");
-      } else if (err.code === "auth/user-not-found") {
-        showError("المستخدم غير موجود");
-      } else if (err.code === "auth/wrong-password") {
-        showError("كلمة المرور غير صحيحة");
-      } else if (err.code === "auth/network-request-failed") {
-        showError("مشكلة في الاتصال بالشبكة. يرجى المحاولة مرة أخرى");
-      } else if (err.code === "auth/operation-not-allowed") {
-        showError(
-          "طريقة تسجيل الدخول غير مفعّلة. يرجى تفعيل Email/Password في Firebase Console"
-        );
-      } else {
-        // طباعة الأخطاء غير المتوقعة فقط في Console
-        console.error("Unexpected authentication error:", err);
-        showError("حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى");
-      }
+      console.error(err);
+      showError(err.message || "حدث خطأ. حاول مرة أخرى");
     } finally {
       setLoading(false);
     }
   };
 
+  // ======== تسجيل الدخول باستخدام Google ========
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    setIsProcessing(true);
-
     try {
-      await signInWithGoogle();
-      
-      // إذا كان Redirect، سيتم التعامل معه في AuthProvider
-      // إذا كان Popup، سيتم التوجيه هنا
-      if (typeof window !== "undefined") {
-        const savedUser = localStorage.getItem("userName");
-        if (savedUser && rememberMe) {
-          localStorage.setItem("rememberMe", "true");
-        }
+      // لو iOS أو PWA استخدم Redirect، وإلا Popup
+      if (
+        /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+        window.matchMedia("(display-mode: standalone)").matches
+      ) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        const exists = await checkUserExists(user.uid);
+        if (!exists) await createUserDocument(user, "user");
+        localStorage.setItem("userName", user.displayName || user.email);
+        router.push("/home");
       }
     } catch (err) {
-      setIsProcessing(false);
-      // الأخطاء يتم التعامل معها في AuthProvider
+      console.error("Google Sign-In Error:", err);
+      showError("فشل تسجيل الدخول باستخدام Google");
     } finally {
       setLoading(false);
     }
   };
 
-  // عرض loading أثناء التحقق الأولي
   if (initialLoading) {
     return (
       <main className={styles.container}>
@@ -310,7 +210,6 @@ export default function LoginPage() {
             ? "التبديل إلى الوضع الداكن"
             : "التبديل إلى الوضع الفاتح"
         }
-        aria-label="تبديل الوضع"
       >
         {theme === "light" ? "🌙" : "☀️"}
       </button>
@@ -329,7 +228,7 @@ export default function LoginPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="أدخل اسمك"
-                required={!isLogin}
+                required
                 className={styles.input}
               />
             </div>
@@ -361,21 +260,14 @@ export default function LoginPage() {
               <span
                 className={styles.eyeIcon}
                 onClick={() => setShowPassword(!showPassword)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    setShowPassword(!showPassword);
-                  }
-                }}
               >
-                {showPassword ? <FaRegEyeSlash/> : <FaRegEye/>}
+                {showPassword ? <FaRegEyeSlash /> : <FaRegEye />}
               </span>
             </div>
           </div>
 
-          {isLogin && (
-            <div className={styles.rememberForgot}>
+          <div className={styles.rememberForgot}>
+            {isLogin && (
               <label className={styles.checkboxGroup}>
                 <input
                   type="checkbox"
@@ -385,15 +277,8 @@ export default function LoginPage() {
                 />
                 <span className={styles.checkboxLabel}>تذكرني</span>
               </label>
-              <button
-                type="button"
-                onClick={() => {/* TODO: Implement forgot password */}}
-                className={styles.forgotPassword}
-              >
-                نسيت كلمة المرور؟
-              </button>
-            </div>  
-          )}
+            )}
+          </div>
 
           <button
             type="submit"
@@ -417,23 +302,8 @@ export default function LoginPage() {
             onClick={handleGoogleSignIn}
             disabled={loading}
             className={`${styles.socialButton} ${styles.google}`}
-            title="تسجيل الدخول باستخدام Google"
           >
             G
-          </button>
-          <button
-            disabled
-            className={`${styles.socialButton} ${styles.facebook}`}
-            title="قريباً"
-          >
-            f
-          </button>
-          <button
-            disabled
-            className={`${styles.socialButton} ${styles.twitter}`}
-            title="قريباً"
-          >
-            🐦
           </button>
         </div>
 
@@ -456,4 +326,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
