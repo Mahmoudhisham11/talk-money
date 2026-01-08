@@ -306,8 +306,16 @@ export function useAuthHandler() {
    * @returns {Promise<void>}
    */
   const signInWithGoogle = async (rememberMe = false) => {
-    setLoading(true);
     setError(null);
+
+    // حفظ rememberMe في localStorage قبل Redirect
+    if (typeof window !== "undefined") {
+      if (rememberMe) {
+        localStorage.setItem("rememberMe", "true");
+      } else {
+        localStorage.removeItem("rememberMe");
+      }
+    }
 
     try {
       // تسجيل الخروج أولاً لإجبار اختيار الحساب
@@ -328,10 +336,14 @@ export function useAuthHandler() {
 
       if (deviceInfo.shouldUseRedirect) {
         // استخدام Redirect في Safari و iOS و PWA و Mobile
+        // لا نضع loading = true هنا لأن الصفحة سيتم إعادة تحميلها
         await signInWithRedirect(auth, provider);
         // سيتم إعادة التوجيه - getRedirectResult سيتعامل مع النتيجة في useEffect
+        // لا نضع finally هنا لأن الصفحة سيتم إعادة تحميلها
+        return;
       } else {
         // استخدام Popup في Chrome Desktop
+        setLoading(true);
         try {
           const result = await signInWithPopup(auth, provider);
           const user = result.user;
@@ -344,11 +356,15 @@ export function useAuthHandler() {
             popupError.code === "auth/popup-blocked" ||
             popupError.code === "auth/popup-closed-by-user"
           ) {
+            setLoading(false);
             await signInWithRedirect(auth, provider);
             // سيتم إعادة التوجيه - getRedirectResult سيتعامل مع النتيجة في useEffect
+            return;
           } else {
             throw popupError;
           }
+        } finally {
+          setLoading(false);
         }
       }
     } catch (err) {
@@ -370,9 +386,8 @@ export function useAuthHandler() {
         setError(errorMessage);
       }
       
-      throw new Error(errorMessage);
-    } finally {
       setLoading(false);
+      throw new Error(errorMessage);
     }
   };
 
@@ -423,10 +438,10 @@ export function useAuthHandler() {
             const userName = user.displayName || user.email || "";
             localStorage.setItem("userName", userName);
 
-            // التحقق من rememberMe من localStorage
+            // التحقق من rememberMe من localStorage (تم حفظه قبل Redirect)
             const savedRememberMe = localStorage.getItem("rememberMe");
-            if (savedRememberMe === "true") {
-              localStorage.setItem("rememberMe", "true");
+            if (savedRememberMe !== "true") {
+              localStorage.removeItem("rememberMe");
             }
           }
 

@@ -2,23 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth, db } from "../firebase";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-  signOut,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  onAuthStateChanged,
-} from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
+import { signOut } from "firebase/auth";
 import { FaRegEyeSlash } from "react-icons/fa";
 import { FaRegEye } from "react-icons/fa6";
 import { useTheme } from "../context/ThemeContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useAuthHandler } from "../hooks/useAuthHandler";
 import styles from "../login.module.css";
 
 export default function LoginPage() {
@@ -26,169 +17,128 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { showSuccess, showError } = useNotifications();
+  
+  // استخدام الدالة الجاهزة لإدارة المصادقة
+  const {
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    loading,
+    error: authError,
+  } = useAuthHandler();
 
-  const provider = new GoogleAuthProvider();
-
-  // ======== التحقق من وجود المستخدم في Firestore ========
-  const checkUserExists = async (uid) => {
-    try {
-      const userDocRef = doc(db, "users", uid);
-      const userDoc = await getDoc(userDocRef);
-      return userDoc.exists();
-    } catch (error) {
-      console.error("Error checking user existence:", error);
-      return false;
-    }
-  };
-
-  // ======== إنشاء مستند المستخدم في Firestore ========
-  const createUserDocument = async (user, userRole = "user") => {
-    try {
-      const userDocRef = doc(db, "users", user.uid);
-      await setDoc(userDocRef, {
-        email: user.email,
-        displayName: user.displayName || name || user.email,
-        role: userRole,
-        createdAt: serverTimestamp(),
-        uid: user.uid,
-      });
-    } catch (error) {
-      console.error("Error creating user document:", error);
-      throw error;
-    }
-  };
-
-  // ======== التحقق من حالة تسجيل الدخول عند تحميل الصفحة ========
+  // التحقق من حالة تسجيل الدخول عند تحميل الصفحة
   useEffect(() => {
-    const handleAuthState = async (user) => {
-      if (user) {
-        const userExists = await checkUserExists(user.uid);
-        if (userExists) {
-          localStorage.setItem("userName", user.displayName || user.email);
+    let mounted = true;
+    let unsubscribe = null;
+
+    const checkAuth = async () => {
+      if (typeof window === "undefined") {
+        setInitialLoading(false);
+        return;
+      }
+
+      // التحقق من حالة المصادقة دائماً (مهم لـ Google Redirect)
+      unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (!mounted) return;
+        
+        if (user) {
+          // المستخدم مسجل دخول - التوجه إلى الصفحة الرئيسية
           router.push("/home");
         } else {
-          await signOut(auth);
+          setInitialLoading(false);
         }
-      }
-      setInitialLoading(false);
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, handleAuthState);
-
-    // ======== التعامل مع Redirect بعد Google Sign-In ========
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result && result.user) {
-          const user = result.user;
-          const exists = await checkUserExists(user.uid);
-          if (!exists) {
-            await createUserDocument(user, "user");
-          }
-          localStorage.setItem("userName", user.displayName || user.email);
-          router.push("/home");
-        }
-      })
-      .catch((err) => {
-        console.error("Google Redirect Error:", err);
-        setInitialLoading(false);
       });
 
-    return () => unsubscribe();
+      // إعادة تعيين initialLoading بعد فترة قصيرة كـ fallback
+      setTimeout(() => {
+        if (mounted) {
+          setInitialLoading(false);
+        }
+      }, 1000);
+    };
+
+    checkAuth();
+
+    return () => {
+      mounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [router]);
 
-  // ======== تسجيل الدخول / إنشاء حساب بالإيميل ========
+  // عرض رسائل الخطأ من useAuthHandler
+  useEffect(() => {
+    if (authError) {
+      showError(authError);
+    }
+  }, [authError, showError]);
+
+  // دالة لتسجيل الدخول بالبريد الإلكتروني
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
 
-    if (!email || !password || (!isLogin && !name.trim())) {
+    // التحقق من صحة المدخلات
+    if (!email || !password) {
       showError("يرجى ملء جميع الحقول المطلوبة");
-      setLoading(false);
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       showError("البريد الإلكتروني غير صحيح");
-      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      showError("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+      return;
+    }
+
+    if (!isLogin && !name.trim()) {
+      showError("يرجى إدخال الاسم");
       return;
     }
 
     try {
       if (isLogin) {
-        const { user } = await signInWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-        const exists = await checkUserExists(user.uid);
-        if (!exists) {
-          await signOut(auth);
-          showError("الحساب غير موجود في النظام");
-          setLoading(false);
-          return;
-        }
-        localStorage.setItem("userName", user.displayName || user.email);
-        if (rememberMe) localStorage.setItem("rememberMe", "true");
+        // تسجيل الدخول
+        await signInWithEmail(email, password, false);
         showSuccess("تم تسجيل الدخول بنجاح");
-        router.push("/home");
       } else {
-        try {
-          await signOut(auth);
-        } catch {}
-        const { user } = await createUserWithEmailAndPassword(
-          auth,
-          email,
-          password
-        );
-        if (name) await updateProfile(user, { displayName: name });
-        await createUserDocument(user, "user");
-        localStorage.setItem("userName", name || user.email);
-        if (rememberMe) localStorage.setItem("rememberMe", "true");
+        // إنشاء حساب جديد
+        await signUpWithEmail(email, password, name, false);
         showSuccess("تم إنشاء الحساب بنجاح");
-        router.push("/home");
       }
     } catch (err) {
-      console.error(err);
-      showError(err.message || "حدث خطأ. حاول مرة أخرى");
-    } finally {
-      setLoading(false);
+      // الأخطاء يتم التعامل معها في useAuthHandler
+      // فقط نعرض رسالة الخطأ إذا لم تكن معالجة بالفعل
+      if (!authError) {
+        showError(err.message || "حدث خطأ غير متوقع");
+      }
     }
   };
 
-  // ======== تسجيل الدخول باستخدام Google ========
+  // دالة لتسجيل الدخول باستخدام Google
   const handleGoogleSignIn = async () => {
-    setLoading(true);
     try {
-      // لو iOS أو PWA استخدم Redirect، وإلا Popup
-      if (
-        /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-        window.matchMedia("(display-mode: standalone)").matches
-      ) {
-        await signInWithRedirect(auth, provider);
-      } else {
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        const exists = await checkUserExists(user.uid);
-        if (!exists) await createUserDocument(user, "user");
-        localStorage.setItem("userName", user.displayName || user.email);
-        router.push("/home");
-      }
+      await signInWithGoogle(false);
+      // رسالة النجاح تظهر تلقائياً من useAuthHandler
     } catch (err) {
-      console.error("Google Sign-In Error:", err);
-      showError("فشل تسجيل الدخول باستخدام Google");
-    } finally {
-      setLoading(false);
+      // لا نعرض رسالة خطأ إذا أغلق المستخدم النافذة (إجراء طبيعي)
+      if (err.message && !err.message.includes("popup-closed")) {
+        showError(err.message || "حدث خطأ أثناء تسجيل الدخول بـ Google");
+      }
     }
   };
 
+  // عرض loading أثناء التحقق الأولي
   if (initialLoading) {
     return (
       <main className={styles.container}>
@@ -210,6 +160,7 @@ export default function LoginPage() {
             ? "التبديل إلى الوضع الداكن"
             : "التبديل إلى الوضع الفاتح"
         }
+        aria-label="تبديل الوضع"
       >
         {theme === "light" ? "🌙" : "☀️"}
       </button>
@@ -228,7 +179,7 @@ export default function LoginPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="أدخل اسمك"
-                required
+                required={!isLogin}
                 className={styles.input}
               />
             </div>
@@ -260,25 +211,30 @@ export default function LoginPage() {
               <span
                 className={styles.eyeIcon}
                 onClick={() => setShowPassword(!showPassword)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    setShowPassword(!showPassword);
+                  }
+                }}
               >
-                {showPassword ? <FaRegEyeSlash /> : <FaRegEye />}
+                {showPassword ? <FaRegEyeSlash/> : <FaRegEye/>}
               </span>
             </div>
           </div>
 
-          <div className={styles.rememberForgot}>
-            {isLogin && (
-              <label className={styles.checkboxGroup}>
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className={styles.checkbox}
-                />
-                <span className={styles.checkboxLabel}>تذكرني</span>
-              </label>
-            )}
-          </div>
+          {isLogin && (
+            <div className={styles.rememberForgot}>
+              <button
+                type="button"
+                onClick={() => {/* TODO: Implement forgot password */}}
+                className={styles.forgotPassword}
+              >
+                نسيت كلمة المرور؟
+              </button>
+            </div>  
+          )}
 
           <button
             type="submit"
@@ -302,8 +258,23 @@ export default function LoginPage() {
             onClick={handleGoogleSignIn}
             disabled={loading}
             className={`${styles.socialButton} ${styles.google}`}
+            title="تسجيل الدخول باستخدام Google"
           >
             G
+          </button>
+          <button
+            disabled
+            className={`${styles.socialButton} ${styles.facebook}`}
+            title="قريباً"
+          >
+            f
+          </button>
+          <button
+            disabled
+            className={`${styles.socialButton} ${styles.twitter}`}
+            title="قريباً"
+          >
+            🐦
           </button>
         </div>
 
