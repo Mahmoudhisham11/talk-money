@@ -1,7 +1,7 @@
 "use client";
 import { useRouter, usePathname } from "next/navigation";
 import { FaTimes, FaHome, FaUsers, FaChartBar, FaCog } from "react-icons/fa";
-import styles from "./Sidebar.module.css"
+import styles from "./Sidebar.module.css";
 export default function SideBar({ isOpen, onClose, userRole }) {
   const router = useRouter();
   const pathname = usePathname();
