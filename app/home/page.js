@@ -1,22 +1,22 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "../firebase";
 import {
   doc,
-  getDoc,
   setDoc,
   collection,
   addDoc,
   query,
   where,
-  getDocs,
   deleteDoc,
   updateDoc,
+  onSnapshot,
+  serverTimestamp,
 } from "firebase/firestore";
 import { useNotifications } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
-import { FaCog, FaUsers, FaBars } from "react-icons/fa";
+import { FaBell, FaBars } from "react-icons/fa";
 import BudgetSlider from "../components/BudgetSlider";
 import ExpenseList from "../components/ExpenseList";
 import AddBudgetModal from "../components/AddBudgetModal";
@@ -59,17 +59,45 @@ export default function HomePage() {
     investment: 0,
     commitments: 0,
   });
-  const [allExpenses, setAllExpenses] = useState([]);
+  const [todayExpenses, setTodayExpenses] = useState([]);
+  const [todayIncomes, setTodayIncomes] = useState([]);
   const [displayLimit, setDisplayLimit] = useState(5);
+  const [dailyBudget, setDailyBudget] = useState(0);
+  const [notifications, setNotifications] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [expenseToDelete, setExpenseToDelete] = useState(null);
   const [selectedCardIndex, setSelectedCardIndex] = useState(null);
+  const notificationsRef = useRef(null);
+  const expensesSnapshotUnsubscribe = useRef(null);
+  const incomesSnapshotUnsubscribe = useRef(null);
+  const dailyBudgetSnapshotUnsubscribe = useRef(null);
+  const processedNotificationsRef = useRef(new Set());
+  const lastCheckedDateRef = useRef(null);
   const router = useRouter();
   const { showSuccess, showError } = useNotifications();
+
+  // دالة للحصول على تاريخ اليوم بصيغة ISO
+  const getTodayISO = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today.toISOString().split("T")[0];
+  };
+
+  // دالة للتحقق من تجديد اليوم
+  const checkDayReset = () => {
+    const today = getTodayISO();
+    if (lastCheckedDateRef.current !== today) {
+      lastCheckedDateRef.current = today;
+      processedNotificationsRef.current.clear();
+      return true;
+    }
+    return false;
+  };
 
   // Load user data when user is authenticated
   useEffect(() => {
@@ -84,16 +112,6 @@ export default function HomePage() {
       }
 
       try {
-        // Get user document from Firestore
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-
-        if (!userDoc.exists()) {
-          // User not found in Firestore - sign out
-          await signOut();
-          return;
-        }
-
         // Set user data
         const name = user.displayName || user.email || "";
         setUserName(name);
@@ -105,14 +123,13 @@ export default function HomePage() {
           }
         }
 
-        const userData = userDoc.data();
-        setUserRole(userData.role || "user");
+        // التحقق من تجديد اليوم
+        checkDayReset();
 
-        if (userData.budget) {
-          setBudget(userData.budget);
-        }
-
-        await fetchExpenses(user.uid);
+        // إعداد real-time listeners
+        setupExpensesListener(user.uid);
+        setupIncomesListener(user.uid);
+        setupDailyBudgetListener(user.uid);
       } catch (error) {
         showError("حدث خطأ أثناء جلب بيانات المستخدم");
         await signOut();
@@ -124,6 +141,76 @@ export default function HomePage() {
     loadUserData();
   }, [user, authLoading, router, signOut, showError]);
 
+  // التحقق من تجديد اليوم كل دقيقة
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkDayReset();
+    }, 60000); // كل دقيقة
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // تنظيف الإشعارات القديمة (أكثر من يوم)
+  useEffect(() => {
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    setNotifications((prev) =>
+      prev.filter((notification) => {
+        const notificationDate = new Date(notification.timestamp);
+        return notificationDate > oneDayAgo;
+      })
+    );
+  }, []);
+
+  // التحقق من تجاوز المبلغ اليومي عند تحديث المصاريف أو المبلغ اليومي
+  useEffect(() => {
+    if (dailyBudget > 0 && todayExpenses.length > 0) {
+      const dailyExpenses = todayExpenses.reduce(
+        (total, expense) => total + (expense.amount || 0),
+        0
+      );
+
+      if (dailyExpenses > dailyBudget) {
+        const excessAmount = dailyExpenses - dailyBudget;
+        const today = getTodayISO();
+        const notificationId = `daily-budget-exceeded-${today}`;
+
+        // التحقق من عدم معالجة هذا الإشعار من قبل
+        if (!processedNotificationsRef.current.has(notificationId)) {
+          processedNotificationsRef.current.add(notificationId);
+
+          setNotifications((prev) => {
+            const existingNotification = prev.find((n) => n.id === notificationId);
+            if (existingNotification) return prev;
+
+            const newNotification = {
+              id: notificationId,
+              type: "warning",
+              message: `تم تجاوز المبلغ اليومي! المصاريف: ${dailyExpenses.toLocaleString(
+                "ar-EG"
+              )} ج.م، المحدد: ${dailyBudget.toLocaleString(
+                "ar-EG"
+              )} ج.م، الزيادة: ${excessAmount.toLocaleString("ar-EG")} ج.م`,
+              timestamp: new Date().toISOString(),
+            };
+
+            return [newNotification, ...prev];
+          });
+
+          // تأجيل استدعاء showError لتجنب تحديث state أثناء render
+          setTimeout(() => {
+            showError(
+              `تم تجاوز المبلغ اليومي بمقدار ${excessAmount.toLocaleString(
+                "ar-EG"
+              )} ج.م`
+            );
+          }, 0);
+        }
+      }
+    }
+  }, [todayExpenses, dailyBudget, showError]);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedName = localStorage.getItem("userName");
@@ -133,35 +220,248 @@ export default function HomePage() {
     }
   }, [userName]);
 
-  const fetchExpenses = async (userId) => {
+  // إغلاق قائمة الإشعارات عند النقر خارجها
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        isNotificationsOpen &&
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target)
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    };
+
+    if (isNotificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
+
+  // دالة لحساب الميزانية من الدخل والمصاريف
+  const calculateBudget = (incomes, expenses) => {
+    const initialBudget = {
+      personal: 0,
+      investment: 0,
+      commitments: 0,
+    };
+
+    // إضافة الدخل (مقسوم على 3)
+    incomes.forEach((income) => {
+      const dividedAmount = (income.amount || 0) / 3;
+      initialBudget.personal += dividedAmount;
+      initialBudget.investment += dividedAmount;
+      initialBudget.commitments += dividedAmount;
+    });
+
+    // طرح المصروف من الميزانية المناسبة
+    expenses.forEach((expense) => {
+      const budgetType = expense.budgetType || "personal";
+      initialBudget[budgetType] = Math.max(
+        0,
+        initialBudget[budgetType] - (expense.amount || 0)
+      );
+    });
+
+    return initialBudget;
+  };
+
+  // إعداد real-time listener للمصاريف (اليوم الحالي فقط)
+  const setupExpensesListener = (userId) => {
+    if (expensesSnapshotUnsubscribe.current) {
+      expensesSnapshotUnsubscribe.current();
+    }
+
     try {
       const expensesRef = collection(db, "expenses");
       const q = query(expensesRef, where("userId", "==", userId));
-      const querySnapshot = await getDocs(q);
-      const expensesList = [];
-      querySnapshot.forEach((doc) => {
-        expensesList.push({ id: doc.id, ...doc.data() });
-      });
-      expensesList.sort((a, b) => {
-        const dateA = a.date || a.createdAt || "";
-        const dateB = b.date || b.createdAt || "";
-        return dateB.localeCompare(dateA);
-      });
-      setAllExpenses(expensesList);
-      // إعادة تعيين displayLimit عند جلب بيانات جديدة
-      setDisplayLimit(5);
+
+      expensesSnapshotUnsubscribe.current = onSnapshot(
+        q,
+        (querySnapshot) => {
+          const todayISO = getTodayISO();
+          const expensesList = [];
+          
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.date) {
+              const expenseDate = new Date(data.date);
+              expenseDate.setHours(0, 0, 0, 0);
+              const expenseDateISO = expenseDate.toISOString().split("T")[0];
+              
+              // عرض المصاريف اليومية فقط
+              if (expenseDateISO === todayISO) {
+                expensesList.push({ id: doc.id, ...data });
+              }
+            }
+          });
+          
+          expensesList.sort((a, b) => {
+            const dateA = a.date || a.createdAt || "";
+            const dateB = b.date || b.createdAt || "";
+            return dateB.localeCompare(dateA);
+          });
+          
+          setTodayExpenses(expensesList);
+          setDisplayLimit(5);
+        },
+        (error) => {
+          setTimeout(() => {
+            showError("حدث خطأ أثناء جلب المصاريف");
+          }, 0);
+        }
+      );
     } catch (error) {
-      console.error("Error fetching expenses:", error);
-      showError("حدث خطأ أثناء جلب المصاريف");
+      setTimeout(() => {
+        showError("حدث خطأ أثناء إعداد متابعة المصاريف");
+      }, 0);
     }
   };
+
+  // إعداد real-time listener للدخل (اليوم الحالي فقط)
+  const setupIncomesListener = (userId) => {
+    if (incomesSnapshotUnsubscribe.current) {
+      incomesSnapshotUnsubscribe.current();
+    }
+
+    try {
+      const incomesRef = collection(db, "incomes");
+      const q = query(incomesRef, where("userId", "==", userId));
+
+      incomesSnapshotUnsubscribe.current = onSnapshot(
+        q,
+        (querySnapshot) => {
+          const todayISO = getTodayISO();
+          const incomesList = [];
+          
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.date) {
+              const incomeDate = new Date(data.date);
+              incomeDate.setHours(0, 0, 0, 0);
+              const incomeDateISO = incomeDate.toISOString().split("T")[0];
+              
+              // عرض الدخل اليومي فقط
+              if (incomeDateISO === todayISO) {
+                incomesList.push({ id: doc.id, ...data });
+              }
+            }
+          });
+          
+          incomesList.sort((a, b) => {
+            const dateA = a.date || a.createdAt || "";
+            const dateB = b.date || b.createdAt || "";
+            return dateB.localeCompare(dateA);
+          });
+          
+          setTodayIncomes(incomesList);
+        },
+        (error) => {
+          setTimeout(() => {
+            showError("حدث خطأ أثناء جلب الدخل");
+          }, 0);
+        }
+      );
+    } catch (error) {
+      setTimeout(() => {
+        showError("حدث خطأ أثناء إعداد متابعة الدخل");
+      }, 0);
+    }
+  };
+
+  // إعداد real-time listener للمبلغ اليومي
+  const setupDailyBudgetListener = (userId) => {
+    if (dailyBudgetSnapshotUnsubscribe.current) {
+      dailyBudgetSnapshotUnsubscribe.current();
+    }
+
+    const updateDailyBudget = () => {
+      const todayISO = getTodayISO();
+      const dailyBudgetsRef = collection(db, "dailyBudgets");
+      const q = query(
+        dailyBudgetsRef,
+        where("userId", "==", userId),
+        where("date", "==", todayISO)
+      );
+
+      dailyBudgetSnapshotUnsubscribe.current = onSnapshot(
+        q,
+        (querySnapshot) => {
+          if (!querySnapshot.empty) {
+            const dailyBudgetDoc = querySnapshot.docs[0];
+            const data = dailyBudgetDoc.data();
+            setDailyBudget(data.amount || 0);
+          } else {
+            setDailyBudget(0);
+          }
+        },
+        (error) => {
+          // خطأ صامت
+        }
+      );
+    };
+
+    try {
+      updateDailyBudget();
+      
+      // إعادة إعداد الـ listener كل دقيقة للتحقق من تجديد اليوم
+      const interval = setInterval(() => {
+        const todayISO = getTodayISO();
+        if (lastCheckedDateRef.current !== todayISO) {
+          checkDayReset();
+          if (dailyBudgetSnapshotUnsubscribe.current) {
+            dailyBudgetSnapshotUnsubscribe.current();
+          }
+          updateDailyBudget();
+        }
+      }, 60000);
+
+      return () => clearInterval(interval);
+    } catch (error) {
+      // خطأ صامت
+    }
+  };
+
+  // إعادة حساب الميزانية عند تحديث المصاريف أو الدخل
+  useEffect(() => {
+    const calculatedBudget = calculateBudget(todayIncomes, todayExpenses);
+    setBudget(calculatedBudget);
+  }, [todayIncomes, todayExpenses]);
+
+  // تنظيف الاشتراك عند إلغاء التحميل
+  useEffect(() => {
+    return () => {
+      if (expensesSnapshotUnsubscribe.current) {
+        expensesSnapshotUnsubscribe.current();
+      }
+      if (incomesSnapshotUnsubscribe.current) {
+        incomesSnapshotUnsubscribe.current();
+      }
+      if (dailyBudgetSnapshotUnsubscribe.current) {
+        dailyBudgetSnapshotUnsubscribe.current();
+      }
+    };
+  }, []);
 
   const handleLoadMore = () => {
     setDisplayLimit((prev) => prev + 5);
   };
 
+  // دمج الدخل والمصاريف لعرضها معاً
+  const allTransactions = [
+    ...todayIncomes.map((income) => ({ ...income, type: "income" })),
+    ...todayExpenses.map((expense) => ({ ...expense, type: "expense" })),
+  ].sort((a, b) => {
+    const dateA = a.date || a.createdAt || "";
+    const dateB = b.date || b.createdAt || "";
+    return dateB.localeCompare(dateA);
+  });
+
   // عرض المعاملات حسب displayLimit
-  const expenses = allExpenses.slice(0, displayLimit);
+  const expenses = allTransactions.slice(0, displayLimit);
 
   const handleCardClick = (index) => {
     setSelectedCardIndex(index);
@@ -186,6 +486,7 @@ export default function HomePage() {
         "personal";
       const currentBudget = budget[selectedType];
 
+      // التحقق من الميزانية
       if (expenseData.amount > currentBudget) {
         showError(
           `المبلغ المتاح في هذا الكارت غير كافي. المتاح: ${currentBudget.toLocaleString(
@@ -196,30 +497,35 @@ export default function HomePage() {
         return;
       }
 
-      const newBudget = {
-        ...budget,
-        [selectedType]: Math.max(0, currentBudget - expenseData.amount),
-      };
+      // التحقق من المبلغ اليومي (فقط إشعار، لا إيقاف العملية)
+      if (dailyBudget > 0) {
+        const totalTodayExpenses =
+          todayExpenses.reduce((total, expense) => total + (expense.amount || 0), 0) +
+          expenseData.amount;
 
-      await setDoc(
-        doc(db, "users", user.uid),
-        { budget: newBudget },
-        { merge: true }
-      );
+        if (totalTodayExpenses > dailyBudget) {
+          const excessAmount = totalTodayExpenses - dailyBudget;
+          setTimeout(() => {
+            showError(
+              `تم تجاوز المبلغ اليومي بمقدار ${excessAmount.toLocaleString("ar-EG")} ج.م`
+            );
+          }, 0);
+        }
+      }
 
+      // إضافة المصروف في collection منفصلة
+      const todayISO = getTodayISO();
       await addDoc(collection(db, "expenses"), {
         userId: user.uid,
         amount: expenseData.amount,
-        type: "expense",
         category: expenseData.category,
         budgetType: selectedType,
         reason: expenseData.reason,
         date: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
       });
 
-      setBudget(newBudget);
-      await fetchExpenses(user.uid);
+      // لا نحتاج تحديث الميزانية هنا لأن onSnapshot سيقوم بذلك تلقائياً
       showSuccess("تم إضافة المصروف بنجاح");
       setIsExpenseModalOpen(false);
       setSelectedCardIndex(null);
@@ -237,33 +543,16 @@ export default function HomePage() {
     setActionLoading((prev) => ({ ...prev, add: true }));
 
     try {
-      // تقسيم المبلغ بالتساوي على 3
-      const dividedAmount = amount / 3;
-
-      const newBudget = {
-        personal: budget.personal + dividedAmount,
-        investment: budget.investment + dividedAmount,
-        commitments: budget.commitments + dividedAmount,
-      };
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        { budget: newBudget },
-        { merge: true }
-      );
-
-      await addDoc(collection(db, "expenses"), {
+      // إضافة الدخل في collection منفصلة
+      await addDoc(collection(db, "incomes"), {
         userId: user.uid,
         amount: amount,
-        type: "income",
         category: "other",
         reason: reason,
         date: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
       });
 
-      setBudget(newBudget);
-      await fetchExpenses(user.uid);
       showSuccess("تم إضافة المبلغ بنجاح");
     } catch (error) {
       console.error("Error adding budget:", error);
@@ -273,10 +562,10 @@ export default function HomePage() {
     }
   };
 
-  const handleDeleteClick = (expenseId) => {
-    const expense = allExpenses.find((e) => e.id === expenseId);
-    if (expense) {
-      setExpenseToDelete(expense);
+  const handleDeleteClick = (transactionId) => {
+    const transaction = allTransactions.find((t) => t.id === transactionId);
+    if (transaction) {
+      setExpenseToDelete(transaction);
       setIsConfirmModalOpen(true);
     }
   };
@@ -288,42 +577,14 @@ export default function HomePage() {
     setIsConfirmModalOpen(false);
 
     try {
-      // حذف المعاملة من Firestore
-      await deleteDoc(doc(db, "expenses", expenseToDelete.id));
+      // حذف المعاملة من collection المناسبة
+      const collectionName = expenseToDelete.type === "income" ? "incomes" : "expenses";
+      await deleteDoc(doc(db, collectionName, expenseToDelete.id));
 
-      // تحديث الرصيد
-      const amount = expenseToDelete.amount || 0;
-      let newBudget = { ...budget };
-
-      if (expenseToDelete.type === "income") {
-        // إذا كان دخل، نطرح من الرصيد (مقسوم على 3)
-        const dividedAmount = amount / 3;
-        newBudget = {
-          personal: Math.max(0, budget.personal - dividedAmount),
-          investment: Math.max(0, budget.investment - dividedAmount),
-          commitments: Math.max(0, budget.commitments - dividedAmount),
-        };
-      } else {
-        // إذا كان مصروف، نضيف للرصيد
-        const budgetType = expenseToDelete.budgetType || "personal";
-        newBudget = {
-          ...budget,
-          [budgetType]: budget[budgetType] + amount,
-        };
-      }
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        { budget: newBudget },
-        { merge: true }
-      );
-
-      setBudget(newBudget);
-      await fetchExpenses(user.uid);
       showSuccess("تم حذف المعاملة بنجاح");
       setExpenseToDelete(null);
     } catch (error) {
-      console.error("Error deleting expense:", error);
+      console.error("Error deleting transaction:", error);
       showError("حدث خطأ أثناء حذف المعاملة");
     } finally {
       setActionLoading((prev) => ({ ...prev, delete: false }));
@@ -341,70 +602,28 @@ export default function HomePage() {
     setActionLoading((prev) => ({ ...prev, edit: true }));
 
     try {
-      const oldExpense = allExpenses.find((e) => e.id === updatedExpense.id);
-      if (!oldExpense) return;
+      const oldTransaction = allTransactions.find((t) => t.id === updatedExpense.id);
+      if (!oldTransaction) return;
 
-      // تحديث المعاملة في Firestore
-      await updateDoc(doc(db, "expenses", updatedExpense.id), {
+      // تحديث المعاملة في collection المناسبة
+      const collectionName = updatedExpense.type === "income" ? "incomes" : "expenses";
+      const updateData = {
         amount: updatedExpense.amount,
         reason: updatedExpense.reason,
         category: updatedExpense.category,
-        budgetType: updatedExpense.budgetType,
-        type: updatedExpense.type,
-      });
+      };
 
-      // تحديث الرصيد
-      let newBudget = { ...budget };
-
-      // إعادة المبلغ القديم
-      const oldAmount = oldExpense.amount || 0;
-      if (oldExpense.type === "income") {
-        // إعادة المبلغ القديم (مقسوم على 3)
-        const dividedOldAmount = oldAmount / 3;
-        newBudget = {
-          personal: Math.max(0, budget.personal - dividedOldAmount),
-          investment: Math.max(0, budget.investment - dividedOldAmount),
-          commitments: Math.max(0, budget.commitments - dividedOldAmount),
-        };
-      } else {
-        const oldBudgetType = oldExpense.budgetType || "personal";
-        newBudget = {
-          ...budget,
-          [oldBudgetType]: budget[oldBudgetType] + oldAmount,
-        };
+      if (updatedExpense.type === "expense") {
+        updateData.budgetType = updatedExpense.budgetType;
       }
 
-      // إضافة المبلغ الجديد
-      const newAmount = updatedExpense.amount || 0;
-      if (updatedExpense.type === "income") {
-        // إضافة المبلغ الجديد (مقسوم على 3)
-        const dividedNewAmount = newAmount / 3;
-        newBudget = {
-          personal: newBudget.personal + dividedNewAmount,
-          investment: newBudget.investment + dividedNewAmount,
-          commitments: newBudget.commitments + dividedNewAmount,
-        };
-      } else {
-        const newBudgetType = updatedExpense.budgetType || "personal";
-        newBudget = {
-          ...newBudget,
-          [newBudgetType]: Math.max(0, newBudget[newBudgetType] - newAmount),
-        };
-      }
+      await updateDoc(doc(db, collectionName, updatedExpense.id), updateData);
 
-      await setDoc(
-        doc(db, "users", user.uid),
-        { budget: newBudget },
-        { merge: true }
-      );
-
-      setBudget(newBudget);
-      await fetchExpenses(user.uid);
       showSuccess("تم تحديث المعاملة بنجاح");
       setIsEditModalOpen(false);
       setSelectedExpense(null);
     } catch (error) {
-      console.error("Error updating expense:", error);
+      console.error("Error updating transaction:", error);
       showError("حدث خطأ أثناء تحديث المعاملة");
     } finally {
       setActionLoading((prev) => ({ ...prev, edit: false }));
@@ -476,14 +695,94 @@ export default function HomePage() {
             </div>
           </div>
           <div className={styles.links}>
-            <button
-              onClick={() => router.push("/settings")}
-              className={styles.iconButton}
-              title="الإعدادات"
-              aria-label="الإعدادات"
-            >
-              <FaCog />
-            </button>
+            <div ref={notificationsRef} className={styles.notificationsContainer}>
+              <button
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className={styles.iconButton}
+                title="الإشعارات"
+                aria-label="الإشعارات"
+              >
+                <FaBell />
+                {notifications.length > 0 && (
+                  <span className={styles.notificationBadge}>
+                    {notifications.length > 99 ? "99+" : notifications.length}
+                  </span>
+                )}
+              </button>
+              {isNotificationsOpen && (
+                <div className={styles.notificationsDropdown}>
+                  <div className={styles.notificationsHeader}>
+                    <h3>الإشعارات</h3>
+                    {notifications.length > 0 && (
+                      <button
+                        onClick={() => setNotifications([])}
+                        className={styles.clearNotifications}
+                        title="مسح جميع الإشعارات"
+                      >
+                        مسح الكل
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsNotificationsOpen(false)}
+                      className={styles.closeNotifications}
+                      aria-label="إغلاق"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className={styles.notificationsList}>
+                    {notifications.length === 0 ? (
+                      <div className={styles.emptyNotifications}>
+                        <span>لا توجد إشعارات جديدة</span>
+                      </div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className={`${styles.notificationItem} ${
+                            styles[notification.type]
+                          }`}
+                        >
+                          <div className={styles.notificationContent}>
+                            <span className={styles.notificationIcon}>
+                              {notification.type === "warning" && "⚠️"}
+                              {notification.type === "error" && "❌"}
+                              {notification.type === "success" && "✅"}
+                              {notification.type === "info" && "ℹ️"}
+                            </span>
+                            <div className={styles.notificationText}>
+                              <p className={styles.notificationMessage}>
+                                {notification.message}
+                              </p>
+                              <span className={styles.notificationTime}>
+                                {new Date(notification.timestamp).toLocaleString(
+                                  "ar-EG",
+                                  {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  }
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() =>
+                              setNotifications((prev) =>
+                                prev.filter((n) => n.id !== notification.id)
+                              )
+                            }
+                            className={styles.removeNotification}
+                            aria-label="حذف الإشعار"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className={styles.burgerButton}
@@ -514,7 +813,7 @@ export default function HomePage() {
 
             <ExpenseList
               expenses={expenses}
-              allExpensesCount={allExpenses.length}
+              allExpensesCount={allTransactions.length}
               displayLimit={displayLimit}
               onEdit={handleEditExpense}
               onDelete={handleDeleteClick}

@@ -141,6 +141,7 @@
   font-size: 20px;
   transition: all 0.2s ease;
   box-shadow: 0 2px 8px var(--shadow);
+  position: relative;
 }
 
 .iconButton:hover {
@@ -151,6 +152,216 @@
 
 .iconButton:active {
   transform: translateY(0);
+}
+
+.notificationsContainer {
+  position: relative;
+}
+
+.notificationsDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -281px;
+  width: 320px;
+  max-width: calc(100vw - 48px);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px var(--shadow-lg);
+  z-index: 1000;
+  animation: slideDown 0.2s ease-out;
+  direction: rtl;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notificationBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  border-radius: 12px;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  border: 2px solid var(--card-bg);
+}
+
+.notificationsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  gap: 8px;
+}
+
+.notificationsHeader h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.closeNotifications {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.closeNotifications:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.notificationsList {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.emptyNotifications {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.clearNotifications {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clearNotifications:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.notificationItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s ease;
+}
+
+.notificationItem:hover {
+  background: var(--bg-secondary);
+}
+
+.notificationItem:last-child {
+  border-bottom: none;
+}
+
+.notificationItem.warning {
+  border-right: 3px solid #f59e0b;
+}
+
+.notificationItem.error {
+  border-right: 3px solid #ef4444;
+}
+
+.notificationItem.success {
+  border-right: 3px solid #10b981;
+}
+
+.notificationItem.info {
+  border-right: 3px solid #3b82f6;
+}
+
+.notificationContent {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  align-items: flex-start;
+}
+
+.notificationIcon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.notificationText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.notificationMessage {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.notificationTime {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.removeNotification {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.removeNotification:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .notificationsDropdown {
+    left: auto;
+    right: 0;
+    width: 280px;
+  }
 }
 
 /* Main Content */

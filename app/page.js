@@ -14,7 +14,7 @@ export default function LandingPage() {
     // انتظار ثانيتين
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 5000);
+    }, 2000);
 
     // التحقق من حالة تسجيل الدخول
     const unsubscribe = onAuthStateChanged(auth, (user) => {

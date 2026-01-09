@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { useTheme } from "../context/ThemeContext";
+import { useNotifications } from "../context/NotificationContext";
 import { FaBars } from "react-icons/fa";
 import SideBar from "../components/Sidebar";
 import styles from "./settings.module.css";
@@ -15,8 +16,11 @@ export default function SettingsPage() {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [dailyBudget, setDailyBudget] = useState("");
+  const [dailyBudgetLoading, setDailyBudgetLoading] = useState(false);
   const router = useRouter();
   const { themeMode, resolvedTheme, setThemeMode } = useTheme();
+  const { showSuccess, showError } = useNotifications();
 
   // Auto-open sidebar on desktop
   useEffect(() => {
@@ -55,8 +59,25 @@ export default function SettingsPage() {
           setUser(currentUser);
           const userData = userDoc.data();
           setUserRole(userData.role || "user");
+          
+          // جلب المبلغ اليومي من collection منفصلة
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const todayISO = today.toISOString().split("T")[0];
+          
+          const dailyBudgetsRef = collection(db, "dailyBudgets");
+          const q = query(
+            dailyBudgetsRef,
+            where("userId", "==", currentUser.uid),
+            where("date", "==", todayISO)
+          );
+          
+          const dailyBudgetSnapshot = await getDocs(q);
+          if (!dailyBudgetSnapshot.empty) {
+            const dailyBudgetData = dailyBudgetSnapshot.docs[0].data();
+            setDailyBudget(dailyBudgetData.amount?.toString() || "");
+          }
         } catch (error) {
-          console.error("Error fetching user data:", error);
           // في حالة الخطأ، تسجيل الخروج وإعادة التوجيه
           await signOut(auth);
           if (typeof window !== "undefined") {
@@ -73,6 +94,62 @@ export default function SettingsPage() {
 
     return () => unsubscribe();
   }, [router]);
+
+  // دالة لحفظ المبلغ اليومي في collection منفصلة
+  const handleSaveDailyBudget = async () => {
+    if (!user) return;
+    
+    const amount = parseFloat(dailyBudget);
+    if (isNaN(amount) || amount < 0) {
+      showError("يرجى إدخال مبلغ صحيح");
+      return;
+    }
+
+    setDailyBudgetLoading(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayISO = today.toISOString().split("T")[0];
+      
+      // البحث عن مبلغ يومي موجود لليوم الحالي
+      const dailyBudgetsRef = collection(db, "dailyBudgets");
+      const q = query(
+        dailyBudgetsRef,
+        where("userId", "==", user.uid),
+        where("date", "==", todayISO)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        // تحديث المبلغ اليومي الموجود
+        const dailyBudgetDoc = querySnapshot.docs[0];
+        await setDoc(
+          doc(db, "dailyBudgets", dailyBudgetDoc.id),
+          {
+            amount: amount,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else {
+        // إضافة مبلغ يومي جديد
+        await setDoc(doc(db, "dailyBudgets", `${user.uid}_${todayISO}`), {
+          userId: user.uid,
+          amount: amount,
+          date: todayISO,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      
+      showSuccess("تم حفظ المبلغ اليومي بنجاح");
+    } catch (error) {
+      showError("حدث خطأ أثناء حفظ المبلغ اليومي");
+    } finally {
+      setDailyBudgetLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -153,6 +230,39 @@ export default function SettingsPage() {
                 {user?.displayName || "غير محدد"}
               </span>
             </div>
+          </div>
+        </div>
+
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>المبلغ اليومي</h2>
+          <div className={styles.settingItem}>
+            <div className={styles.settingInfo}>
+              <span className={styles.settingLabel}>المبلغ اليومي</span>
+              <span className={styles.settingValue}>
+                المبلغ الذي تنفقه يومياً
+              </span>
+            </div>
+          </div>
+          <div className={styles.dailyBudgetContainer}>
+            <div className={styles.inputGroup}>
+              <input
+                type="number"
+                value={dailyBudget}
+                onChange={(e) => setDailyBudget(e.target.value)}
+                placeholder="أدخل المبلغ اليومي"
+                min="0"
+                step="0.01"
+                className={styles.dailyBudgetInput}
+              />
+              <span className={styles.currency}>ج.م</span>
+            </div>
+            <button
+              onClick={handleSaveDailyBudget}
+              disabled={dailyBudgetLoading || !dailyBudget}
+              className={styles.saveButton}
+            >
+              {dailyBudgetLoading ? "جاري الحفظ..." : "حفظ"}
+            </button>
           </div>
         </div>
         </main>

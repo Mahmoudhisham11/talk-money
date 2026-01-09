@@ -17,7 +17,7 @@ import { FaRegEyeSlash } from "react-icons/fa";
 import { FaRegEye } from "react-icons/fa6";
 import { useNotifications } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
-import styles from "../login.module.css";
+import styles from "./login.module.css";
 
 export default function LoginPage() {
   // ========== State Management ==========
