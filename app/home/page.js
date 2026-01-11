@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { db } from "../firebase";
 import {
   doc,
+  getDoc,
   setDoc,
   collection,
   addDoc,
@@ -61,6 +62,8 @@ export default function HomePage() {
   });
   const [todayExpenses, setTodayExpenses] = useState([]);
   const [todayIncomes, setTodayIncomes] = useState([]);
+  const [allExpenses, setAllExpenses] = useState([]); // كل المصاريف لحساب الميزانية
+  const [allIncomes, setAllIncomes] = useState([]); // كل الدخل لحساب الميزانية
   const [displayLimit, setDisplayLimit] = useState(5);
   const [dailyBudget, setDailyBudget] = useState(0);
   const [notifications, setNotifications] = useState([]);
@@ -121,6 +124,15 @@ export default function HomePage() {
           if (user.photoURL) {
             localStorage.setItem("userPhoto", user.photoURL);
           }
+        }
+
+        // جلب role المستخدم من Firestore
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserRole(userData.role || "user");
+        } else {
+          setUserRole("user");
         }
 
         // التحقق من تجديد اليوم
@@ -196,7 +208,7 @@ export default function HomePage() {
             };
 
             return [newNotification, ...prev];
-          });
+    });
 
           // تأجيل استدعاء showError لتجنب تحديث state أثناء render
           setTimeout(() => {
@@ -266,10 +278,15 @@ export default function HomePage() {
       );
     });
 
-    return initialBudget;
+    // تقريب الميزانيات لأقرب عدد صحيح (إزالة القروش)
+    return {
+      personal: Math.round(initialBudget.personal),
+      investment: Math.round(initialBudget.investment),
+      commitments: Math.round(initialBudget.commitments),
+    };
   };
 
-  // إعداد real-time listener للمصاريف (اليوم الحالي فقط)
+  // إعداد real-time listener للمصاريف (كل المصاريف + اليوم الحالي فقط)
   const setupExpensesListener = (userId) => {
     if (expensesSnapshotUnsubscribe.current) {
       expensesSnapshotUnsubscribe.current();
@@ -283,7 +300,8 @@ export default function HomePage() {
         q,
         (querySnapshot) => {
           const todayISO = getTodayISO();
-          const expensesList = [];
+          const expensesList = []; // كل المصاريف
+          const todayExpensesList = []; // المصاريف اليومية فقط
           
           querySnapshot.forEach((doc) => {
             const data = doc.data();
@@ -292,20 +310,32 @@ export default function HomePage() {
               expenseDate.setHours(0, 0, 0, 0);
               const expenseDateISO = expenseDate.toISOString().split("T")[0];
               
-              // عرض المصاريف اليومية فقط
+              // إضافة لكل المصاريف
+              expensesList.push({ id: doc.id, ...data });
+              
+              // إضافة للمصاريف اليومية فقط
               if (expenseDateISO === todayISO) {
-                expensesList.push({ id: doc.id, ...data });
+                todayExpensesList.push({ id: doc.id, ...data });
               }
             }
           });
           
+          // ترتيب كل المصاريف
           expensesList.sort((a, b) => {
             const dateA = a.date || a.createdAt || "";
             const dateB = b.date || b.createdAt || "";
             return dateB.localeCompare(dateA);
           });
           
-          setTodayExpenses(expensesList);
+          // ترتيب المصاريف اليومية
+          todayExpensesList.sort((a, b) => {
+            const dateA = a.date || a.createdAt || "";
+            const dateB = b.date || b.createdAt || "";
+            return dateB.localeCompare(dateA);
+          });
+          
+          setAllExpenses(expensesList); // كل المصاريف لحساب الميزانية
+          setTodayExpenses(todayExpensesList); // المصاريف اليومية للعرض
           setDisplayLimit(5);
         },
         (error) => {
@@ -321,7 +351,7 @@ export default function HomePage() {
     }
   };
 
-  // إعداد real-time listener للدخل (اليوم الحالي فقط)
+  // إعداد real-time listener للدخل (كل الدخل + اليوم الحالي فقط)
   const setupIncomesListener = (userId) => {
     if (incomesSnapshotUnsubscribe.current) {
       incomesSnapshotUnsubscribe.current();
@@ -335,7 +365,8 @@ export default function HomePage() {
         q,
         (querySnapshot) => {
           const todayISO = getTodayISO();
-          const incomesList = [];
+          const incomesList = []; // كل الدخل
+          const todayIncomesList = []; // الدخل اليومي فقط
           
           querySnapshot.forEach((doc) => {
             const data = doc.data();
@@ -344,20 +375,32 @@ export default function HomePage() {
               incomeDate.setHours(0, 0, 0, 0);
               const incomeDateISO = incomeDate.toISOString().split("T")[0];
               
-              // عرض الدخل اليومي فقط
+              // إضافة لكل الدخل
+              incomesList.push({ id: doc.id, ...data });
+              
+              // إضافة للدخل اليومي فقط
               if (incomeDateISO === todayISO) {
-                incomesList.push({ id: doc.id, ...data });
+                todayIncomesList.push({ id: doc.id, ...data });
               }
             }
           });
           
+          // ترتيب كل الدخل
           incomesList.sort((a, b) => {
             const dateA = a.date || a.createdAt || "";
             const dateB = b.date || b.createdAt || "";
             return dateB.localeCompare(dateA);
           });
           
-          setTodayIncomes(incomesList);
+          // ترتيب الدخل اليومي
+          todayIncomesList.sort((a, b) => {
+            const dateA = a.date || a.createdAt || "";
+            const dateB = b.date || b.createdAt || "";
+            return dateB.localeCompare(dateA);
+          });
+          
+          setAllIncomes(incomesList); // كل الدخل لحساب الميزانية
+          setTodayIncomes(todayIncomesList); // الدخل اليومي للعرض
         },
         (error) => {
           setTimeout(() => {
@@ -425,11 +468,11 @@ export default function HomePage() {
     }
   };
 
-  // إعادة حساب الميزانية عند تحديث المصاريف أو الدخل
+  // إعادة حساب الميزانية عند تحديث المصاريف أو الدخل (استخدام كل البيانات)
   useEffect(() => {
-    const calculatedBudget = calculateBudget(todayIncomes, todayExpenses);
+    const calculatedBudget = calculateBudget(allIncomes, allExpenses);
     setBudget(calculatedBudget);
-  }, [todayIncomes, todayExpenses]);
+  }, [allIncomes, allExpenses]);
 
   // تنظيف الاشتراك عند إلغاء التحميل
   useEffect(() => {
@@ -442,8 +485,8 @@ export default function HomePage() {
       }
       if (dailyBudgetSnapshotUnsubscribe.current) {
         dailyBudgetSnapshotUnsubscribe.current();
-      }
-    };
+    }
+  };
   }, []);
 
   const handleLoadMore = () => {
@@ -678,19 +721,19 @@ export default function HomePage() {
       <header className={styles.header}>
         <div className={styles.headerContent}>
           <div className={styles.headerLeft}>
-            <div className={styles.userSection}>
-              <ProfileDropdown userName={userName} onLogout={handleLogout} />
-              <div className={styles.userInfo}>
-                <h1 className={styles.userName}>{userName}</h1>
-                {userRole && (
-                  <span
-                    className={`${styles.roleBadge} ${
-                      userRole === "admin" ? styles.admin : styles.user
-                    }`}
-                  >
-                    {userRole === "admin" ? "مدير" : "مستخدم"}
-                  </span>
-                )}
+          <div className={styles.userSection}>
+            <ProfileDropdown userName={userName} onLogout={handleLogout} />
+            <div className={styles.userInfo}>
+              <h1 className={styles.userName}>{userName}</h1>
+              {!loading && (
+                <span
+                  className={`${styles.roleBadge} ${
+                    userRole === "admin" ? styles.admin : styles.user
+                  }`}
+                >
+                  {userRole === "admin" ? "مدير" : "مستخدم"}
+                </span>
+              )}
               </div>
             </div>
           </div>
@@ -795,83 +838,83 @@ export default function HomePage() {
       </header>
       <div className={styles.contentContainer}>
         <main className={styles.mainContent}>
-          <div className={styles.content}>
-            <section className={styles.budgetSection}>
-              <BudgetSlider
-                budgets={budgets}
-                onCardClick={handleCardClick}
-                selectedCardIndex={selectedCardIndex}
-              />
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className={styles.addButton}
-              >
-                <span className={styles.addIcon}>+</span>
-                إضافة مبلغ جديد
-              </button>
-            </section>
-
-            <ExpenseList
-              expenses={expenses}
-              allExpensesCount={allTransactions.length}
-              displayLimit={displayLimit}
-              onEdit={handleEditExpense}
-              onDelete={handleDeleteClick}
-              onLoadMore={handleLoadMore}
+        <div className={styles.content}>
+          <section className={styles.budgetSection}>
+            <BudgetSlider
+              budgets={budgets}
+              onCardClick={handleCardClick}
+              selectedCardIndex={selectedCardIndex}
             />
-          </div>
-        </main>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className={styles.addButton}
+            >
+              <span className={styles.addIcon}>+</span>
+              إضافة مبلغ جديد
+            </button>
+          </section>
+
+          <ExpenseList
+            expenses={expenses}
+              allExpensesCount={allTransactions.length}
+            displayLimit={displayLimit}
+            onEdit={handleEditExpense}
+            onDelete={handleDeleteClick}
+            onLoadMore={handleLoadMore}
+          />
+        </div>
+      </main>
         <SideBar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           userRole={userRole}
         />
-        <AddBudgetModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onAdd={handleAddBudget}
-          loading={actionLoading.add}
-        />
+      <AddBudgetModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAdd={handleAddBudget}
+        loading={actionLoading.add}
+      />
 
-        <AddExpenseModal
-          isOpen={isExpenseModalOpen}
-          onClose={() => {
-            setIsExpenseModalOpen(false);
-            setSelectedCardIndex(null);
-          }}
-          onAdd={handleAddExpense}
-          selectedBudgetType={
-            selectedCardIndex !== null
-              ? ["personal", "investment", "commitments"][selectedCardIndex]
-              : null
-          }
-          loading={actionLoading.addExpense}
-        />
+      <AddExpenseModal
+        isOpen={isExpenseModalOpen}
+        onClose={() => {
+          setIsExpenseModalOpen(false);
+          setSelectedCardIndex(null);
+        }}
+        onAdd={handleAddExpense}
+        selectedBudgetType={
+          selectedCardIndex !== null
+            ? ["personal", "investment", "commitments"][selectedCardIndex]
+            : null
+        }
+        loading={actionLoading.addExpense}
+      />
 
-        <EditExpenseModal
-          isOpen={isEditModalOpen}
-          onClose={() => {
-            setIsEditModalOpen(false);
-            setSelectedExpense(null);
-          }}
-          expense={selectedExpense}
-          onSave={handleSaveExpense}
-          loading={actionLoading.edit}
-        />
+      <EditExpenseModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedExpense(null);
+        }}
+        expense={selectedExpense}
+        onSave={handleSaveExpense}
+        loading={actionLoading.edit}
+      />
 
-        <ConfirmModal
-          isOpen={isConfirmModalOpen}
-          onClose={() => {
-            setIsConfirmModalOpen(false);
-            setExpenseToDelete(null);
-          }}
-          onConfirm={handleConfirmDelete}
-          title="تأكيد الحذف"
-          message="هل أنت متأكد من حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء."
-          confirmText={actionLoading.delete ? "جاري الحذف..." : "حذف"}
-          cancelText="إلغاء"
-          type="danger"
-        />
+      <ConfirmModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => {
+          setIsConfirmModalOpen(false);
+          setExpenseToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="تأكيد الحذف"
+        message="هل أنت متأكد من حذف هذه المعاملة؟ لا يمكن التراجع عن هذا الإجراء."
+        confirmText={actionLoading.delete ? "جاري الحذف..." : "حذف"}
+        cancelText="إلغاء"
+        type="danger"
+      />
       </div>
     </div>
   );

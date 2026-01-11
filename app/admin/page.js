@@ -203,9 +203,32 @@ export default function AdminPage() {
                 </td>
               </tr>
             ) : (
-              users.map((userItem) => (
+              users.map((userItem) => {
+                // تحويل Timestamp إلى Date
+                let createdAtDate = null;
+                if (userItem.createdAt) {
+                  try {
+                    // Firestore Timestamp - لديه دالة toDate()
+                    if (typeof userItem.createdAt.toDate === 'function') {
+                      createdAtDate = userItem.createdAt.toDate();
+                    }
+                    // Timestamp object - لديه seconds
+                    else if (userItem.createdAt.seconds) {
+                      createdAtDate = new Date(userItem.createdAt.seconds * 1000);
+                    }
+                    // Regular date string or number
+                    else {
+                      createdAtDate = new Date(userItem.createdAt);
+                    }
+                  } catch (error) {
+                    console.error("Error converting createdAt:", error);
+                    createdAtDate = null;
+                  }
+                }
+
+                return (
                 <tr key={userItem.id}>
-                  <td>{userItem.displayName || "بدون اسم"}</td>
+                  <td>{userItem.name || userItem.displayName || userItem.email || "بدون اسم"}</td>
                   <td>{userItem.email}</td>
                   <td>
                     <span
@@ -217,8 +240,12 @@ export default function AdminPage() {
                     </span>
                   </td>
                   <td>
-                    {userItem.createdAt
-                      ? new Date(userItem.createdAt).toLocaleDateString("ar-EG")
+                    {createdAtDate && !isNaN(createdAtDate.getTime())
+                      ? createdAtDate.toLocaleDateString("ar-EG", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })
                       : "-"}
                   </td>
                   <td>
@@ -246,7 +273,8 @@ export default function AdminPage() {
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -267,7 +295,7 @@ export default function AdminPage() {
         }}
         onConfirm={handleConfirmDelete}
         title="تأكيد الحذف"
-        message={`هل أنت متأكد من حذف المستخدم "${userToDelete?.displayName || userToDelete?.email}"؟ لا يمكن التراجع عن هذا الإجراء.`}
+        message={`هل أنت متأكد من حذف المستخدم "${userToDelete?.name || userToDelete?.displayName || userToDelete?.email}"؟ لا يمكن التراجع عن هذا الإجراء.`}
         confirmText={deleting ? "جاري الحذف..." : "حذف"}
         cancelText="إلغاء"
         type="danger"
