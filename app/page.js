@@ -10,44 +10,28 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const hasNavigated = useRef(false);
-  const startTime = useRef(Date.now());
-  const minLoadingDuration = 1500; // الحد الأدنى للـ loading: 1.5 ثانية
 
   useEffect(() => {
     let unsubscribe = null;
-    let timeoutId = null;
 
-    // التحقق من حالة تسجيل الدخول
+    // التحقق من حالة تسجيل الدخول - توجيه فوري بدون انتظار
     unsubscribe = onAuthStateChanged(auth, (user) => {
       if (hasNavigated.current) return;
 
-      // إلغاء أي timeout سابق
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      hasNavigated.current = true;
+      setLoading(false);
+
+      // توجيه فوري بدون أي تأخير
+      if (user) {
+        // المستخدم مسجل دخول - التوجه إلى /home
+        router.replace("/home");
+      } else {
+        // المستخدم غير مسجل دخول - التوجه إلى /login
+        router.replace("/login");
       }
-
-      // حساب الوقت المتبقي للوصول للحد الأدنى
-      const elapsed = Date.now() - startTime.current;
-      const remainingTime = Math.max(0, minLoadingDuration - elapsed);
-
-      // الانتظار حتى يمر الوقت الأدنى ثم التوجيه
-      timeoutId = setTimeout(() => {
-        if (hasNavigated.current) return;
-
-        hasNavigated.current = true;
-        setLoading(false);
-
-        if (user) {
-          // المستخدم مسجل دخول - التوجه إلى /home
-          router.replace("/home");
-        } else {
-          // المستخدم غير مسجل دخول - التوجه إلى /login
-          router.replace("/login");
-        }
-      }, remainingTime);
     });
 
-    // Timeout احتياطي في حالة تأخر onAuthStateChanged (5 ثواني كحد أقصى)
+    // Timeout احتياطي في حالة تأخر onAuthStateChanged (2 ثانية كحد أقصى)
     const fallbackTimeout = setTimeout(() => {
       if (!hasNavigated.current) {
         hasNavigated.current = true;
@@ -55,14 +39,11 @@ export default function LandingPage() {
         // افتراض أن المستخدم غير مسجل دخول في حالة الخطأ
         router.replace("/login");
       }
-    }, 5000);
+    }, 2000);
 
     return () => {
       if (unsubscribe) {
         unsubscribe();
-      }
-      if (timeoutId) {
-        clearTimeout(timeoutId);
       }
       clearTimeout(fallbackTimeout);
     };

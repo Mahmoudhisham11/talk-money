@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { doc, getDoc } from "firebase/firestore";
-import { FaBars } from "react-icons/fa";
+import { FaBars, FaChartLine, FaMoneyBillWave, FaShoppingCart } from "react-icons/fa";
 import SideBar from "../components/Sidebar";
 import styles from "./reports.module.css";
 
@@ -14,6 +15,18 @@ export default function ReportsPage() {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [periodType, setPeriodType] = useState("day"); // "day" or "month"
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedMonth, setSelectedMonth] = useState(
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
+  );
+  const [reportData, setReportData] = useState({
+    totalIncome: 0,
+    totalExpenses: 0,
+    topReason: null,
+    reasonBreakdown: {},
+  });
+  const [fetchingData, setFetchingData] = useState(false);
   const router = useRouter();
 
   // Auto-open sidebar on desktop
@@ -72,6 +85,108 @@ export default function ReportsPage() {
     return () => unsubscribe();
   }, [router]);
 
+  // دالة لجلب البيانات وحساب الإحصائيات
+  const fetchReportData = useCallback(async () => {
+    if (!user) return;
+
+    setFetchingData(true);
+    try {
+      const startDate = periodType === "day" 
+        ? new Date(selectedDate)
+        : new Date(`${selectedMonth}-01`);
+      
+      const endDate = periodType === "day"
+        ? new Date(selectedDate)
+        : new Date(
+            new Date(`${selectedMonth}-01`).getFullYear(),
+            new Date(`${selectedMonth}-01`).getMonth() + 1,
+            0
+          );
+
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      // جلب الدخل
+      const incomesRef = collection(db, "incomes");
+      const incomesQuery = query(
+        incomesRef,
+        where("userId", "==", user.uid)
+      );
+      const incomesSnapshot = await getDocs(incomesQuery);
+
+      // جلب المصاريف
+      const expensesRef = collection(db, "expenses");
+      const expensesQuery = query(
+        expensesRef,
+        where("userId", "==", user.uid)
+      );
+      const expensesSnapshot = await getDocs(expensesQuery);
+
+      let totalIncome = 0;
+      let totalExpenses = 0;
+      const reasonBreakdown = {};
+
+      // معالجة الدخل
+      incomesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.date) {
+          const incomeDate = new Date(data.date);
+          if (incomeDate >= startDate && incomeDate <= endDate) {
+            totalIncome += data.amount || 0;
+          }
+        }
+      });
+
+      // معالجة المصاريف
+      expensesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.date) {
+          const expenseDate = new Date(data.date);
+          if (expenseDate >= startDate && expenseDate <= endDate) {
+            const amount = data.amount || 0;
+            totalExpenses += amount;
+
+            // حساب المصاريف حسب السبب
+            const reason = data.reason || "بدون سبب";
+            if (!reasonBreakdown[reason]) {
+              reasonBreakdown[reason] = 0;
+            }
+            reasonBreakdown[reason] += amount;
+          }
+        }
+      });
+
+      // العثور على أكثر سبب يتم الصرف فيه
+      let topReason = null;
+      let maxAmount = 0;
+      Object.keys(reasonBreakdown).forEach((reason) => {
+        if (reasonBreakdown[reason] > maxAmount) {
+          maxAmount = reasonBreakdown[reason];
+          topReason = reason;
+        }
+      });
+
+      setReportData({
+        totalIncome,
+        totalExpenses,
+        topReason,
+        reasonBreakdown,
+      });
+    } catch (error) {
+      console.error("Error fetching report data:", error);
+    } finally {
+      setFetchingData(false);
+    }
+  }, [user, periodType, selectedDate, selectedMonth]);
+
+  // جلب البيانات عند تغيير الفترة أو التاريخ
+  useEffect(() => {
+    if (user) {
+      fetchReportData();
+    }
+  }, [user, fetchReportData]);
+
+
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
@@ -98,9 +213,161 @@ export default function ReportsPage() {
         <main className={styles.main}>
           <div className={styles.section}>
             <h2 className={styles.sectionTitle}>التقارير المالية</h2>
-            <p className={styles.description}>
-              صفحة التقارير قيد التطوير. سيتم إضافة التقارير المالية قريباً.
-            </p>
+
+            {/* اختيار نوع الفترة */}
+            <div className={styles.periodSelector}>
+              <div className={styles.periodType}>
+                <label>
+                  <input
+                    type="radio"
+                    value="day"
+                    checked={periodType === "day"}
+                    onChange={(e) => setPeriodType(e.target.value)}
+                  />
+                  <span>يوم محدد</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    value="month"
+                    checked={periodType === "month"}
+                    onChange={(e) => setPeriodType(e.target.value)}
+                  />
+                  <span>شهر محدد</span>
+                </label>
+              </div>
+
+              {periodType === "day" ? (
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className={styles.dateInput}
+                />
+              ) : (
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className={styles.dateInput}
+                />
+              )}
+            </div>
+
+            {fetchingData ? (
+              <div className={styles.loadingState}>
+                <div className={styles.spinner}></div>
+                <p>جاري جلب البيانات...</p>
+              </div>
+            ) : (
+              <>
+                {/* بطاقات الإحصائيات */}
+                <div className={styles.statsGrid}>
+                  <div className={styles.statCard}>
+                    <div className={styles.statIcon} style={{ background: "rgba(16, 185, 129, 0.1)" }}>
+                      <FaMoneyBillWave style={{ color: "#10b981" }} />
+                    </div>
+                    <div className={styles.statContent}>
+                      <h3 className={styles.statLabel}>إجمالي الدخل</h3>
+                      <p className={styles.statValue}>
+                        {reportData.totalIncome.toLocaleString("ar-EG")} ج.م
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={styles.statCard}>
+                    <div className={styles.statIcon} style={{ background: "rgba(239, 68, 68, 0.1)" }}>
+                      <FaShoppingCart style={{ color: "#ef4444" }} />
+                    </div>
+                    <div className={styles.statContent}>
+                      <h3 className={styles.statLabel}>إجمالي المصاريف</h3>
+                      <p className={styles.statValue}>
+                        {reportData.totalExpenses.toLocaleString("ar-EG")} ج.م
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={styles.statCard}>
+                    <div className={styles.statIcon} style={{ background: "rgba(59, 130, 246, 0.1)" }}>
+                      <FaChartLine style={{ color: "#3b82f6" }} />
+                    </div>
+                    <div className={styles.statContent}>
+                      <h3 className={styles.statLabel}>المتبقي</h3>
+                      <p
+                        className={styles.statValue}
+                        style={{
+                          color:
+                            reportData.totalIncome - reportData.totalExpenses >= 0
+                              ? "#10b981"
+                              : "#ef4444",
+                        }}
+                      >
+                        {(reportData.totalIncome - reportData.totalExpenses).toLocaleString(
+                          "ar-EG"
+                        )}{" "}
+                        ج.م
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* أكثر سبب يتم الصرف فيه */}
+                {reportData.topReason && (
+                  <div className={styles.topCategoryCard}>
+                    <h3 className={styles.topCategoryTitle}>أكثر سبب يتم الصرف فيه</h3>
+                    <div className={styles.topCategoryContent}>
+                      <span className={styles.topCategoryName}>
+                        {reportData.topReason}
+                      </span>
+                      <span className={styles.topCategoryAmount}>
+                        {reportData.reasonBreakdown[reportData.topReason].toLocaleString(
+                          "ar-EG"
+                        )}{" "}
+                        ج.م
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* تفصيل المصاريف حسب السبب */}
+                {Object.keys(reportData.reasonBreakdown).length > 0 && (
+                  <div className={styles.categoryBreakdown}>
+                    <h3 className={styles.breakdownTitle}>تفصيل المصاريف حسب السبب</h3>
+                    <div className={styles.breakdownList}>
+                      {Object.entries(reportData.reasonBreakdown)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([reason, amount]) => (
+                          <div key={reason} className={styles.breakdownItem}>
+                            <span className={styles.breakdownCategory}>
+                              {reason}
+                            </span>
+                            <span className={styles.breakdownAmount}>
+                              {amount.toLocaleString("ar-EG")} ج.م
+                            </span>
+                            <div className={styles.breakdownBar}>
+                              <div
+                                className={styles.breakdownBarFill}
+                                style={{
+                                  width: `${
+                                    (amount / reportData.totalExpenses) * 100
+                                  }%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* حالة عدم وجود بيانات */}
+                {reportData.totalIncome === 0 && reportData.totalExpenses === 0 && (
+                  <div className={styles.emptyState}>
+                    <p>لا توجد بيانات للفترة المحددة</p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </main>
         <SideBar

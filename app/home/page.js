@@ -102,30 +102,35 @@ export default function HomePage() {
     return false;
   };
 
-  // Load user data when user is authenticated
+  // Load user data when user is authenticated - عرض الصفحة أولاً ثم تحميل البيانات
   useEffect(() => {
-    const loadUserData = async () => {
-      if (authLoading) {
-        return;
-      }
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    // عرض الصفحة فوراً مع البيانات الأساسية
+    const name = user.displayName || user.email || "";
+    setUserName(name);
 
-      try {
-        // Set user data
-        const name = user.displayName || user.email || "";
-        setUserName(name);
-
-        if (typeof window !== "undefined") {
-          localStorage.setItem("userName", name);
-          if (user.photoURL) {
-            localStorage.setItem("userPhoto", user.photoURL);
-          }
+    if (typeof window !== "undefined") {
+      const savedName = localStorage.getItem("userName");
+      if (savedName) {
+        setUserName(savedName);
+      } else {
+        localStorage.setItem("userName", name);
+        if (user.photoURL) {
+          localStorage.setItem("userPhoto", user.photoURL);
         }
+      }
+    }
 
+    // إيقاف الـ loading فوراً لعرض الصفحة
+    setLoading(false);
+
+    // تحميل البيانات في الخلفية
+    const loadUserData = async () => {
+      try {
         // جلب role المستخدم من Firestore
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
@@ -143,15 +148,13 @@ export default function HomePage() {
         setupIncomesListener(user.uid);
         setupDailyBudgetListener(user.uid);
       } catch (error) {
+        console.error("Error loading user data:", error);
         showError("حدث خطأ أثناء جلب بيانات المستخدم");
-        await signOut();
-      } finally {
-        setLoading(false);
       }
     };
 
     loadUserData();
-  }, [user, authLoading, router, signOut, showError]);
+  }, [user, router, showError]);
 
   // التحقق من تجديد اليوم كل دقيقة
   useEffect(() => {
@@ -681,7 +684,8 @@ export default function HomePage() {
     }
   };
 
-  if (authLoading || loading) {
+  // عرض الصفحة فوراً إذا كان المستخدم موجود - البيانات ستُحمّل في الخلفية
+  if (!user) {
     return (
       <div className={styles.loadingContainer}>
         <div className={styles.loadingText}>جاري التحميل...</div>

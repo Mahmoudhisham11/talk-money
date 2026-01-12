@@ -95,12 +95,12 @@ export default function LoginPage() {
     }
   }, []);
 
-  // Redirect to home if user is already logged in
+  // Redirect to home if user is already logged in - فوري بدون انتظار
   useEffect(() => {
-    if (!authLoading && user) {
-      router.push("/home");
+    if (user) {
+      router.replace("/home");
     }
-  }, [user, authLoading, router]);
+  }, [user, router]);
 
 
   const validateInputs = useCallback(() => {
@@ -255,8 +255,9 @@ export default function LoginPage() {
     }
   }, [isLogin, email, password, name, validateInputs, checkUserExists, saveUserToFirestore, router, showSuccess, showError]);
 
-  // Show loading while checking auth state
-  if (authLoading) {
+  // Show loading فقط إذا كان authLoading ولم يتم تحديد user بعد
+  // إذا كان user موجود، سيتم التوجيه فوراً في useEffect
+  if (authLoading && !user) {
     return (
       <main className={styles.container}>
         <div className={styles.initialLoading}>
