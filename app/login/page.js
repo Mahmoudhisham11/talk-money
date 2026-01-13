@@ -96,7 +96,9 @@ export default function LoginPage() {
   }, []);
 
   // Redirect to home if user is already logged in - فوري بدون انتظار
+  // ⚠️ ملاحظة: لا ننتظر authLoading - نعرض الصفحة فوراً
   useEffect(() => {
+    // إذا كان user موجود، التوجيه فوراً (حتى لو authLoading = true)
     if (user) {
       router.replace("/home");
     }
@@ -255,18 +257,20 @@ export default function LoginPage() {
     }
   }, [isLogin, email, password, name, validateInputs, checkUserExists, saveUserToFirestore, router, showSuccess, showError]);
 
-  // Show loading فقط إذا كان authLoading ولم يتم تحديد user بعد
-  // إذا كان user موجود، سيتم التوجيه فوراً في useEffect
-  if (authLoading && !user) {
-    return (
-      <main className={styles.container}>
-        <div className={styles.initialLoading}>
-          <div className={styles.loadingSpinner}></div>
-          <p className={styles.loadingText}>جاري التحميل...</p>
-        </div>
-      </main>
-    );
-  }
+  // ⚠️ ملاحظة: تحسين سرعة تحميل الصفحة
+  // 
+  // المشكلة السابقة:
+  // - authLoading يبقى true حتى يتم تحميل حالة المصادقة من Firebase
+  // - هذا قد يستغرق وقتاً طويلاً خاصة على iOS/PWA
+  // - الصفحة تبقى في loading لفترة طويلة
+  //
+  // الحل:
+  // - عرض الصفحة فوراً بدون انتظار authLoading
+  // - التوجيه إلى /home فقط إذا كان user موجود بالفعل
+  // - لا نعرض loading إلا في حالات محددة جداً (مثل Google sign-in)
+  //
+  // لا نعرض loading - نعرض الصفحة مباشرة
+  // إذا كان user موجود، سيتم التوجيه تلقائياً في useEffect أعلاه
 
   // ========== Render Login Form ==========
   
