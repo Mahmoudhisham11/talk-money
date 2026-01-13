@@ -51,6 +51,7 @@ export default function AdminPage() {
             await signOut(auth);
             if (typeof window !== "undefined") {
               localStorage.removeItem("userName");
+              localStorage.removeItem("userPhoto");
               localStorage.removeItem("rememberMe");
             }
             router.push("/login");
@@ -60,13 +61,26 @@ export default function AdminPage() {
           // المستخدم موجود - التحقق من role
           setUser(currentUser);
           const userData = userDoc.data();
+          // التأكد من وجود role مع القيمة الافتراضية
+          const role = userData?.role || "user";
 
-          if (userData?.role !== "admin") {
+          if (role !== "admin") {
             router.push("/home");
             return;
           }
 
-          setUserRole(userData?.role || "admin");
+          setUserRole(role);
+          
+          // تحديث localStorage بالبيانات الصحيحة
+          if (typeof window !== "undefined") {
+            const firestoreName = userData.name || currentUser.displayName || currentUser.email || "";
+            if (firestoreName) {
+              localStorage.setItem("userName", firestoreName);
+            }
+            if (userData.photoURL || currentUser.photoURL) {
+              localStorage.setItem("userPhoto", userData.photoURL || currentUser.photoURL);
+            }
+          }
 
           // جلب جميع المستخدمين
           await fetchUsers();
@@ -76,6 +90,7 @@ export default function AdminPage() {
           await signOut(auth);
           if (typeof window !== "undefined") {
             localStorage.removeItem("userName");
+            localStorage.removeItem("userPhoto");
             localStorage.removeItem("rememberMe");
           }
           router.push("/login");

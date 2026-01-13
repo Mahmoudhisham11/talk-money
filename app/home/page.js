@@ -103,26 +103,53 @@ export default function HomePage() {
   };
 
   // Load user data when user is authenticated - عرض الصفحة أولاً ثم تحميل البيانات
+  // 
+  // ⚠️ ملاحظة مهمة: مشكلة Reload والتوجيه المزدوج
+  // 
+  // المشكلة:
+  // عند عمل reload للصفحة، يحدث التالي:
+  // 1. authLoading يكون true في البداية (جاري تحميل حالة المصادقة)
+  // 2. user يكون null مؤقتاً (لم يتم تحميله بعد)
+  // 3. إذا تحققنا من !user مباشرة، سيتم التوجيه إلى /login
+  // 4. ثم عندما يتم تحميل user من AuthContext، سيتم التوجيه مرة أخرى إلى /home
+  // 
+  // الحل:
+  // - الانتظار حتى authLoading يكون false قبل التحقق من user
+  // - هذا يمنع التوجيه المزدوج ويضمن أننا نتحقق من حالة المصادقة النهائية
+  //
+  // ملاحظة: المشروع يستخدم signInWithPopup وليس signInWithRedirect
+  // - signInWithPopup: يفتح نافذة منبثقة (المستخدم في المشروع)
+  // - signInWithRedirect: يعيد التوجيه إلى صفحة Google ثم العودة (غير مستخدم)
+  //
   useEffect(() => {
+    // الانتظار حتى يتم تحميل حالة المصادقة قبل التحقق
+    // هذا يمنع التوجيه المزدوج عند reload
+    if (authLoading) {
+      return; // لا تفعل شيء أثناء التحميل
+    }
+
+    // بعد انتهاء التحميل، إذا لم يكن هناك user، التوجيه إلى login
     if (!user) {
       router.replace("/login");
       return;
     }
 
-    // عرض الصفحة فوراً مع البيانات الأساسية
-    const name = user.displayName || user.email || "";
-    setUserName(name);
-
+    // عرض الصفحة فوراً مع البيانات الأساسية من localStorage أو user object
     if (typeof window !== "undefined") {
       const savedName = localStorage.getItem("userName");
       if (savedName) {
         setUserName(savedName);
       } else {
+        const name = user.displayName || user.email || "";
+        setUserName(name);
         localStorage.setItem("userName", name);
         if (user.photoURL) {
           localStorage.setItem("userPhoto", user.photoURL);
         }
       }
+    } else {
+      const name = user.displayName || user.email || "";
+      setUserName(name);
     }
 
     // إيقاف الـ loading فوراً لعرض الصفحة
@@ -135,9 +162,27 @@ export default function HomePage() {
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setUserRole(userData.role || "user");
+          const role = userData.role || "user";
+          setUserRole(role);
+          
+          // تحديث localStorage بالبيانات الصحيحة من Firestore
+          if (typeof window !== "undefined") {
+            const firestoreName = userData.name || user.displayName || user.email || "";
+            if (firestoreName) {
+              setUserName(firestoreName);
+              localStorage.setItem("userName", firestoreName);
+            }
+            if (userData.photoURL || user.photoURL) {
+              localStorage.setItem("userPhoto", userData.photoURL || user.photoURL);
+            }
+          }
         } else {
           setUserRole("user");
+          // إذا لم يكن موجود في Firestore، هذا خطأ - يجب تسجيل الخروج
+          showError("خطأ في بيانات المستخدم");
+          await signOut();
+          router.replace("/login");
+          return;
         }
 
         // التحقق من تجديد اليوم
@@ -154,7 +199,7 @@ export default function HomePage() {
     };
 
     loadUserData();
-  }, [user, router, showError]);
+  }, [user, authLoading, router, showError, signOut]);
 
   // التحقق من تجديد اليوم كل دقيقة
   useEffect(() => {
@@ -685,6 +730,16 @@ export default function HomePage() {
   };
 
   // عرض الصفحة فوراً إذا كان المستخدم موجود - البيانات ستُحمّل في الخلفية
+  // الانتظار حتى يتم تحميل حالة المصادقة قبل التحقق من user
+  if (authLoading || loading) {
+    return (
+      <div className={styles.loadingContainer}>
+        <div className={styles.loadingText}>جاري التحميل...</div>
+      </div>
+    );
+  }
+
+  // بعد انتهاء التحميل، إذا لم يكن هناك user، سيتم التوجيه في useEffect
   if (!user) {
     return (
       <div className={styles.loadingContainer}>

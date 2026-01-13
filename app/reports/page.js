@@ -56,6 +56,7 @@ export default function ReportsPage() {
             await signOut(auth);
             if (typeof window !== "undefined") {
               localStorage.removeItem("userName");
+              localStorage.removeItem("userPhoto");
               localStorage.removeItem("rememberMe");
             }
             router.push("/login");
@@ -65,13 +66,27 @@ export default function ReportsPage() {
           // المستخدم موجود - متابعة التحميل
           setUser(currentUser);
           const userData = userDoc.data();
-          setUserRole(userData.role || "user");
+          // التأكد من وجود role مع القيمة الافتراضية
+          const role = userData?.role || "user";
+          setUserRole(role);
+          
+          // تحديث localStorage بالبيانات الصحيحة
+          if (typeof window !== "undefined") {
+            const firestoreName = userData.name || currentUser.displayName || currentUser.email || "";
+            if (firestoreName) {
+              localStorage.setItem("userName", firestoreName);
+            }
+            if (userData.photoURL || currentUser.photoURL) {
+              localStorage.setItem("userPhoto", userData.photoURL || currentUser.photoURL);
+            }
+          }
         } catch (error) {
           console.error("Error fetching user data:", error);
           // في حالة الخطأ، تسجيل الخروج وإعادة التوجيه
           await signOut(auth);
           if (typeof window !== "undefined") {
             localStorage.removeItem("userName");
+            localStorage.removeItem("userPhoto");
             localStorage.removeItem("rememberMe");
           }
           router.push("/login");
