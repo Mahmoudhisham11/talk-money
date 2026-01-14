@@ -1,30 +1,61 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
 import styles from "./loading.module.css";
 
 export default function LoadingPage() {
   const router = useRouter();
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
-    // التحقق من localStorage للتحقق من حالة تسجيل الدخول
-    const checkAuthStatus = () => {
-      if (typeof window !== "undefined") {
-        const userName = localStorage.getItem("userName");
-        
-        if (userName) {
-          // المستخدم مسجل دخول - التوجه إلى /home
-          router.replace("/home");
-        } else {
-          // المستخدم غير مسجل دخول - التوجه إلى /login
-          router.replace("/login");
-        }
-      }
-    };
+    let unsubscribe = null;
 
-    // تنفيذ التحقق فوراً
-    checkAuthStatus();
+    // ⚠️ ملاحظة: تحسين سرعة التوجيه
+    // 
+    // المشكلة السابقة:
+    // - الاعتماد على localStorage فقط (غير دقيق)
+    // - قد يكون localStorage فارغاً حتى لو المستخدم مسجل دخول
+    // - يستغرق وقتاً طويلاً
+    //
+    // الحل:
+    // - استخدام Firebase Auth مباشرة (onAuthStateChanged)
+    // - توجيه فوري بدون انتظار
+    // - Timeout احتياطي (2 ثانية) في حالة التأخر
+
+    // التحقق من حالة تسجيل الدخول - توجيه فوري بدون انتظار
+    unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (hasNavigated.current) return;
+
+      hasNavigated.current = true;
+
+      // توجيه فوري بدون أي تأخير
+      if (user) {
+        // المستخدم مسجل دخول - التوجه إلى /home
+        router.replace("/home");
+      } else {
+        // المستخدم غير مسجل دخول - التوجه إلى /login
+        router.replace("/login");
+      }
+    });
+
+    // Timeout احتياطي في حالة تأخر onAuthStateChanged (2 ثانية كحد أقصى)
+    const fallbackTimeout = setTimeout(() => {
+      if (!hasNavigated.current) {
+        hasNavigated.current = true;
+        // افتراض أن المستخدم غير مسجل دخول في حالة الخطأ
+        router.replace("/login");
+      }
+    }, 2000);
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      clearTimeout(fallbackTimeout);
+    };
   }, [router]);
 
   return (
